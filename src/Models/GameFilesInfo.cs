@@ -94,7 +94,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
 
         [Required]
         [JsonProperty(PropertyName = "Version", Required = Required.Always)]
-        [XmlAttribute(AttributeName = "Version")]
+        [XmlIgnore]
         public Version Version { get; set; }
 
         [JsonIgnore]
