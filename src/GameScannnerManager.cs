@@ -250,7 +250,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             try
             {
-                var files = new DirectoryInfo(GameScannerTempPath).GetFiles("*.tmp", SearchOption.AllDirectories);
+                var files = new DirectoryInfo(GameScannerTempPath).GetFiles("*", SearchOption.AllDirectories);
 
                 if (files.Length > 0)
                     Parallel.ForEach(files, file =>
@@ -527,15 +527,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
         public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromGameManifest(string type = "production",
             int build = 6148, bool isSteam = false)
         {
-            string txt;
+            var tempFileName = Path.Combine(GameScannerTempPath, $"{Path.GetRandomFileName()}-manifest.txt");
             using (var client = new WebClient())
             {
-                txt = Encoding.UTF8.GetString(await client.DownloadDataTaskAsync(
-                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt"));
+                await client.DownloadFileTaskAsync(
+                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt",
+                    tempFileName);
             }
 
-            var retVal = from line in txt.Split(new[] {Environment.NewLine, "\r\n"},
-                    StringSplitOptions.RemoveEmptyEntries)
+            var retVal = from line in File.ReadAllLines(tempFileName)
                 where line.StartsWith("+")
                 where
                 // Launcher
@@ -569,6 +569,9 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/{lineSplit[3]}",
                     Convert.ToUInt32(lineSplit[4]),
                     Convert.ToInt64(lineSplit[5]));
+
+            if (File.Exists(tempFileName))
+                File.Delete(tempFileName);
 
             return retVal;
         }
