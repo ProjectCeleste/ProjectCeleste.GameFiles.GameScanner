@@ -97,6 +97,16 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
         [XmlIgnore]
         public Version Version { get; set; }
 
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [JsonIgnore]
+        [XmlAttribute(AttributeName = "Version")]
+        public string VersionString
+        {
+            get => Version.ToString();
+            set => Version = new Version(value);
+        }
+
         [JsonIgnore]
         [XmlIgnore]
         public IDictionary<string, GameFileInfo> GameFileInfo { get; }
