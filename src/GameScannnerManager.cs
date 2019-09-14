@@ -527,18 +527,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
         public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromGameManifest(string type = "production",
             int build = 6148, bool isSteam = false)
         {
-            if (!Directory.Exists(GameScannerTempPath))
-                Directory.CreateDirectory(GameScannerTempPath);
-
-            var tempFileName = Path.Combine(GameScannerTempPath, $"{Path.GetRandomFileName()}-manifest.txt");
+            string txt;
             using (var client = new WebClient())
             {
-                await client.DownloadFileTaskAsync(
-                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt",
-                    tempFileName);
+                txt = await client.DownloadStringTaskAsync(
+                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt");
             }
 
-            var retVal = from line in File.ReadAllLines(tempFileName)
+            var retVal = from line in txt.Split(new[] {Environment.NewLine, "\r\n"},
+                    StringSplitOptions.RemoveEmptyEntries)
                 where line.StartsWith("+")
                 where
                 // Launcher
@@ -572,9 +569,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/{lineSplit[3]}",
                     Convert.ToUInt32(lineSplit[4]),
                     Convert.ToInt64(lineSplit[5]));
-
-            if (File.Exists(tempFileName))
-                File.Delete(tempFileName);
 
             return retVal;
         }
