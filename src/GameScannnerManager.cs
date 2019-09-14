@@ -188,10 +188,12 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
 
-                await Task.Factory.StartNew(CleanUpTmpFolder, token);
-
                 return await Task.Run(async () =>
                 {
+                    //
+                    CleanUpTmpFolder();
+
+                    //
                     var retVal = false;
 
                     //
@@ -370,7 +372,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             }
             catch (Exception e)
             {
-                throw new Exception($"Downloaded file '{fileInfo.FileName}' failed! {e.Message}");
+                throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
+                                    $"{e.Message}");
             }
 
             //#3 Check Downloaded File
@@ -521,14 +524,14 @@ namespace ProjectCeleste.GameFiles.GameScanner
             }
         }
 
-        public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromGameManifest(string type, int build,
-            bool isSteam)
+        public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromGameManifest(string type = "production",
+            int build = 6148, bool isSteam = false)
         {
             string txt;
             using (var client = new WebClient())
             {
-                txt = await client.DownloadStringTaskAsync(
-                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt");
+                txt = Encoding.UTF8.GetString(await client.DownloadDataTaskAsync(
+                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt"));
             }
 
             var retVal = from line in txt.Split(new[] {Environment.NewLine, "\r\n"},
@@ -570,7 +573,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return retVal;
         }
 
-        public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromCelesteManifest(bool isSteam)
+        public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromCelesteManifest(bool isSteam = false)
         {
             //Load default manifest
             var filesInfo = (await GameFilesInfoFromGameManifest("production", 6148, isSteam))
