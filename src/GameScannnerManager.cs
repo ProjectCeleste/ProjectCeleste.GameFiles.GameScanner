@@ -527,6 +527,9 @@ namespace ProjectCeleste.GameFiles.GameScanner
         public static async Task<IEnumerable<GameFileInfo>> GameFilesInfoFromGameManifest(string type = "production",
             int build = 6148, bool isSteam = false)
         {
+            if (!Directory.Exists(GameScannerTempPath))
+                Directory.CreateDirectory(GameScannerTempPath);
+
             var tempFileName = Path.Combine(GameScannerTempPath, $"{Path.GetRandomFileName()}-manifest.txt");
             using (var client = new WebClient())
             {
