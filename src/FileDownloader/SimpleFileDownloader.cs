@@ -3,6 +3,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -50,6 +51,10 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public async Task StartAndWait(CancellationToken ct = default(CancellationToken))
         {
+            var path = Path.GetDirectoryName(DwnlTarget);
+            if (path != null && !Directory.Exists(path))
+                Directory.CreateDirectory(path);
+
             using (var webClient = new WebClient())
             {
                 State = DwnlState.Create;
@@ -77,8 +82,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 }
                 finally
                 {
-                    webClient.CancelAsync();
                     _stopwatch.Stop();
+                    //webClient.CancelAsync();
                     cancel.Dispose();
                 }
 
@@ -109,9 +114,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         private void DownloadCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            //
-            _stopwatch.Stop();
-
             //
             if (e.Error != null)
             {
