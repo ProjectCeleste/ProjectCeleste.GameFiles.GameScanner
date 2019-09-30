@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using ProjectCeleste.GameFiles.GameScanner.Utils;
 
 #endregion
 
@@ -75,8 +76,24 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
                 await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
 
-                //
-                cancel.Dispose();
+                try
+                {
+                    //
+                    while (State < DwnlState.Complete)
+                    {
+                        using (await new SemaphoreSlim(0, 1).UseWaitAsync(ct))
+                        {
+                        }
+                        ct.ThrowIfCancellationRequested();
+                    }
+                }
+                finally
+                {
+                    _stopwatch.Stop();
+                    webClient.CancelAsync();
+                    cancel.Dispose();
+                }
+                
 
                 // ReSharper disable once SwitchStatementMissingSomeCases
                 switch (State)
