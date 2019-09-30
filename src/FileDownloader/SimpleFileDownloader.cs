@@ -6,7 +6,6 @@ using System.Diagnostics;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using ProjectCeleste.GameFiles.GameScanner.Utils;
 
 #endregion
 
@@ -70,30 +69,18 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 //
                 State = DwnlState.Download;
 
-                _stopwatch.Reset();
-
-                _stopwatch.Start();
-
-                await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
-
                 try
                 {
-                    //
-                    while (State < DwnlState.Complete)
-                    {
-                        using (await new SemaphoreSlim(0, 1).UseWaitAsync(ct))
-                        {
-                        }
-                        ct.ThrowIfCancellationRequested();
-                    }
+                    _stopwatch.Reset();
+                    _stopwatch.Start();
+                    await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
                 }
                 finally
                 {
-                    _stopwatch.Stop();
                     webClient.CancelAsync();
+                    _stopwatch.Stop();
                     cancel.Dispose();
                 }
-                
 
                 // ReSharper disable once SwitchStatementMissingSomeCases
                 switch (State)
@@ -128,19 +115,19 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             //
             if (e.Error != null)
             {
-                State = DwnlState.Error;
                 Error = e.Error;
+                State = DwnlState.Error;
             }
             else if (e.Cancelled)
             {
-                State = DwnlState.Abort;
                 Error = new OperationCanceledException();
+                State = DwnlState.Abort;
             }
             else
             {
+                Error = null;
                 DwnlProgress = 100;
                 State = DwnlState.Complete;
-                Error = null;
             }
 
             //
