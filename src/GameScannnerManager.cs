@@ -411,7 +411,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         }
                     };
 
-                await fileDownloader.StartAndWait(ct);
+                try
+                {
+                    await fileDownloader.StartAndWait(ct);
+                }
+                catch (Exception e)
+                {
+                    throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
+                                        $"{e}");
+                }
             }
 
             //#3 Check Downloaded File
