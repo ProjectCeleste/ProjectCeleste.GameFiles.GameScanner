@@ -215,8 +215,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 progress.Report(new ScanAndRepairProgress(fileInfo.FileName, "",
                                     (double) _globalProgress / totalSize * 100, ea));
                             };
-                        retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, fileProgress,
-                            _cts.Token);
+                        retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, fileProgress, _cts.Token);
 
                         if (!retVal)
                             break;
@@ -317,7 +316,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     progress.Report(new ScanAndRepairSubProgress(
                         ScanAndRepairSubProgressStep.Checking,
                         "",
-                        (int) ScanAndRepairSubProgressStep.Checking + d / 100 * 10));
+                        (int) ScanAndRepairSubProgressStep.Checking + d * 10));
                 };
             }
 
@@ -352,7 +351,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 progress.Report(new ScanAndRepairSubProgress(
                                     ScanAndRepairSubProgressStep.Downloading,
                                     $"{Download.FormatBytes(fileDownloader.DwnlSizeCompleted)} / {Download.FormatBytes(fileDownloader.DwnlSize)} ({Download.FormatBytes(fileDownloader.DwnlSpeed)}ps)",
-                                    (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress / 100 *
+                                    (int) ScanAndRepairSubProgressStep.Downloading + (fileDownloader.DwnlProgress / 100) *
                                     (ScanAndRepairSubProgressStep.CheckingDownload -
                                      ScanAndRepairSubProgressStep.Downloading - 5)));
                                 break;
@@ -361,7 +360,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                     ScanAndRepairSubProgressStep.Downloading,
                                     "",
                                     (int) ScanAndRepairSubProgressStep.CheckingDownload - 5 +
-                                    fileDownloader.AppendProgress / 100 * 5));
+                                    (fileDownloader.AppendProgress / 100) * 5));
                                 break;
                             case DownloadEngine.DwnlState.Start:
                             case DownloadEngine.DwnlState.Error:
@@ -384,6 +383,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             }
             else
             {
+
                 var fileDownloader = new SimpleFileDownloader(fileInfo.HttpLink, tempFileName);
                 if (progress != null)
                     fileDownloader.ProgressChanged += (sender, eventArg) =>
@@ -398,7 +398,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 progress.Report(new ScanAndRepairSubProgress(
                                     ScanAndRepairSubProgressStep.Downloading,
                                     $"{Download.FormatBytes(fileDownloader.DwnlSizeCompleted)} / {Download.FormatBytes(fileDownloader.DwnlSize)} ({Download.FormatBytes(fileDownloader.DwnlSpeed)}ps)",
-                                    (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress / 100 *
+                                    (int)ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress *
                                     (ScanAndRepairSubProgressStep.CheckingDownload -
                                      ScanAndRepairSubProgressStep.Downloading)));
                                 break;
@@ -410,8 +410,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                     fileDownloader.State, null);
                         }
                     };
-
-                await fileDownloader.StartAndWait(ct);
             }
 
             //#3 Check Downloaded File
@@ -427,7 +425,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     progress.Report(new ScanAndRepairSubProgress(
                         ScanAndRepairSubProgressStep.CheckingDownload,
                         "",
-                        (int) ScanAndRepairSubProgressStep.CheckingDownload + d / 100 * 10));
+                        (int) ScanAndRepairSubProgressStep.CheckingDownload + d * 10));
                 };
             }
 
@@ -457,7 +455,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         progress.Report(new ScanAndRepairSubProgress(
                             ScanAndRepairSubProgressStep.ExtractingDownload,
                             "",
-                            (int) ScanAndRepairSubProgressStep.ExtractingDownload + d / 100 * 10));
+                            (int) ScanAndRepairSubProgressStep.ExtractingDownload + d * 10));
                     };
                 await L33TZipUtils.DoExtractL33TZipFile(tempFileName, tempFileName2, ct, extractProgress);
 
@@ -472,7 +470,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         progress.Report(new ScanAndRepairSubProgress(
                             ScanAndRepairSubProgressStep.CheckingExtractedDownload,
                             "",
-                            (int) ScanAndRepairSubProgressStep.CheckingExtractedDownload + d / 100 * 10));
+                            (int) ScanAndRepairSubProgressStep.CheckingExtractedDownload + d * 10));
                     };
                 }
 
