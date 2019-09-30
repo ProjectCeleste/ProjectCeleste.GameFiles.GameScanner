@@ -24,7 +24,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
     {
         Checking = 0,
         Downloading = 10,
-        FinalizingDownload = 50,
         CheckingDownload = 55,
         ExtractingDownload = 65,
         CheckingExtractedDownload = 85,

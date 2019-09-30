@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.ChunkDownloader;
+using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
 using ProjectCeleste.GameFiles.Tools.L33TZip;
 using ProjectCeleste.GameFiles.Tools.Misc;
@@ -36,24 +37,26 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private readonly object _scanLock = new object();
 
+        private readonly bool _useChunkDownloader;
+
         private CancellationTokenSource _cts;
 
         private IEnumerable<GameFileInfo> _filesInfo;
 
         private long _globalProgress;
 
-        public GameScannnerManager(bool isSteam = false)
+        public GameScannnerManager(bool useChunkDownloader = false, bool isSteam = false) : this(GetGameFilesRootPath(),
+            useChunkDownloader, isSteam)
         {
-            _filesRootPath = GetGameFilesRootPath();
-            _isSteam = isSteam;
         }
 
-        public GameScannnerManager(string filesRootPath, bool isSteam = false)
+        public GameScannnerManager(string filesRootPath, bool useChunkDownloader = false, bool isSteam = false)
         {
             if (string.IsNullOrEmpty(filesRootPath))
                 throw new ArgumentException("Game files path is null or empty!", nameof(filesRootPath));
 
             _filesRootPath = filesRootPath;
+            _useChunkDownloader = useChunkDownloader;
             _isSteam = isSteam;
         }
 
@@ -212,7 +215,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 progress.Report(new ScanAndRepairProgress(fileInfo.FileName, "",
                                     (double) _globalProgress / totalSize * 100, ea));
                             };
-                        retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, fileProgress, _cts.Token);
+                        retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, fileProgress, _cts.Token);
 
                         if (!retVal)
                             break;
@@ -292,7 +295,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         }
 
         public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
-            IProgress<ScanAndRepairSubProgress> progress,
+            bool useChunkDownloader = false, IProgress<ScanAndRepairSubProgress> progress = null,
 #pragma warning disable IDE0034 // Simplifier l'expression 'default'
             CancellationToken ct = default(CancellationToken))
 #pragma warning restore IDE0034 // Simplifier l'expression 'default'
@@ -331,49 +334,82 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (File.Exists(tempFileName))
                 File.Delete(tempFileName);
 
-            var fileDownloader = new FileDownloader(fileInfo.HttpLink, tempFileName, GameScannerCachePath);
-            if (progress != null)
-                fileDownloader.ProgressChanged += (sender, eventArg) =>
-                {
-                    switch (fileDownloader.State)
+            if (useChunkDownloader)
+            {
+                var fileDownloader = new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerCachePath);
+                if (progress != null)
+                    fileDownloader.ProgressChanged += (sender, eventArg) =>
                     {
-                        case DownloadEngine.DwnlState.Invalid:
-                        case DownloadEngine.DwnlState.Idle:
-                        case DownloadEngine.DwnlState.Create:
-                            break;
-                        case DownloadEngine.DwnlState.Download:
-                            progress.Report(new ScanAndRepairSubProgress(
-                                ScanAndRepairSubProgressStep.Downloading,
-                                $"{Download.FormatBytes(fileDownloader.DwnlSizeCompleted)} / {Download.FormatBytes(fileDownloader.DwnlSize)} ({Download.FormatBytes(fileDownloader.DwnlSpeed)}ps)",
-                                (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress *
-                                (ScanAndRepairSubProgressStep.FinalizingDownload -
-                                 ScanAndRepairSubProgressStep.Downloading)));
-                            break;
-                        case DownloadEngine.DwnlState.Append:
-                        case DownloadEngine.DwnlState.Complete:
-                            progress.Report(new ScanAndRepairSubProgress(
-                                ScanAndRepairSubProgressStep.Downloading,
-                                "",
-                                (int) ScanAndRepairSubProgressStep.FinalizingDownload +
-                                fileDownloader.AppendProgress * 5));
-                            break;
-                        case DownloadEngine.DwnlState.Start:
-                        case DownloadEngine.DwnlState.Error:
-                        case DownloadEngine.DwnlState.Abort:
-                            break;
-                        default:
-                            throw new ArgumentOutOfRangeException(nameof(fileDownloader.State),
-                                fileDownloader.State, null);
-                    }
-                };
-            try
-            {
-                await fileDownloader.StartAndWait(ct);
+                        switch (fileDownloader.State)
+                        {
+                            case DownloadEngine.DwnlState.Invalid:
+                            case DownloadEngine.DwnlState.Idle:
+                            case DownloadEngine.DwnlState.Create:
+                                break;
+                            case DownloadEngine.DwnlState.Complete:
+                            case DownloadEngine.DwnlState.Download:
+                                progress.Report(new ScanAndRepairSubProgress(
+                                    ScanAndRepairSubProgressStep.Downloading,
+                                    $"{Download.FormatBytes(fileDownloader.DwnlSizeCompleted)} / {Download.FormatBytes(fileDownloader.DwnlSize)} ({Download.FormatBytes(fileDownloader.DwnlSpeed)}ps)",
+                                    (int) ScanAndRepairSubProgressStep.Downloading + (fileDownloader.DwnlProgress / 100) *
+                                    (ScanAndRepairSubProgressStep.CheckingDownload -
+                                     ScanAndRepairSubProgressStep.Downloading - 5)));
+                                break;
+                            case DownloadEngine.DwnlState.Append:
+                                progress.Report(new ScanAndRepairSubProgress(
+                                    ScanAndRepairSubProgressStep.Downloading,
+                                    "",
+                                    (int) ScanAndRepairSubProgressStep.CheckingDownload - 5 +
+                                    (fileDownloader.AppendProgress / 100) * 5));
+                                break;
+                            case DownloadEngine.DwnlState.Start:
+                            case DownloadEngine.DwnlState.Error:
+                            case DownloadEngine.DwnlState.Abort:
+                                break;
+                            default:
+                                throw new ArgumentOutOfRangeException(nameof(fileDownloader.State),
+                                    fileDownloader.State, null);
+                        }
+                    };
+                try
+                {
+                    await fileDownloader.StartAndWait(ct);
+                }
+                catch (Exception e)
+                {
+                    throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
+                                        $"{e.Message}");
+                }
             }
-            catch (Exception e)
+            else
             {
-                throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
-                                    $"{e.Message}");
+
+                var fileDownloader = new SimpleFileDownloader(fileInfo.HttpLink, tempFileName);
+                if (progress != null)
+                    fileDownloader.ProgressChanged += (sender, eventArg) =>
+                    {
+                        switch (fileDownloader.State)
+                        {
+                            case SimpleFileDownloader.DwnlState.Invalid:
+                            case SimpleFileDownloader.DwnlState.Create:
+                                break;
+                            case SimpleFileDownloader.DwnlState.Complete:
+                            case SimpleFileDownloader.DwnlState.Download:
+                                progress.Report(new ScanAndRepairSubProgress(
+                                    ScanAndRepairSubProgressStep.Downloading,
+                                    $"{Download.FormatBytes(fileDownloader.DwnlSizeCompleted)} / {Download.FormatBytes(fileDownloader.DwnlSize)} ({Download.FormatBytes(fileDownloader.DwnlSpeed)}ps)",
+                                    (int)ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress *
+                                    (ScanAndRepairSubProgressStep.CheckingDownload -
+                                     ScanAndRepairSubProgressStep.Downloading)));
+                                break;
+                            case SimpleFileDownloader.DwnlState.Error:
+                            case SimpleFileDownloader.DwnlState.Abort:
+                                break;
+                            default:
+                                throw new ArgumentOutOfRangeException(nameof(fileDownloader.State),
+                                    fileDownloader.State, null);
+                        }
+                    };
             }
 
             //#3 Check Downloaded File

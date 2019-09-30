@@ -10,7 +10,7 @@ using ProjectCeleste.GameFiles.GameScanner.Utils;
 
 namespace ProjectCeleste.GameFiles.GameScanner.ChunkDownloader
 {
-    public class FileDownloader
+    public class ChunkFileDownloader
     {
         private readonly string _cacheFolder;
         private readonly string _dwnlSource;
@@ -20,7 +20,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.ChunkDownloader
         private DownloadEngine _downloadEngine;
         private DispatcherTimer _downloadTracker;
 
-        public FileDownloader(string dwnlSource, string dwnlTarget, string cacheFolder)
+        public ChunkFileDownloader(string dwnlSource, string dwnlTarget, string cacheFolder)
         {
             _dwnlSource = dwnlSource;
             _dwnlTarget = dwnlTarget;
@@ -47,7 +47,79 @@ namespace ProjectCeleste.GameFiles.GameScanner.ChunkDownloader
 
         public async Task StartAndWait(CancellationToken ct = default(CancellationToken))
         {
-            await StartDownload(ct);
+            if (State != DownloadEngine.DwnlState.Invalid)
+                throw new Exception();
+
+            //create a new download job
+            _download = new Download(_dwnlSource, _dwnlTarget, _cacheFolder);
+
+            //stop the download tracker and engine if they exist
+            _downloadTracker?.Stop();
+            _downloadEngine?.Abort().Join();
+
+            //create the tracker, engine
+            _downloadTracker = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
+
+            _downloadTracker.Tick += (o, eventArgs) => OnProgressChanged();
+            _downloadTracker.Start();
+
+            //create the engine
+            _downloadEngine = new DownloadEngine(_download, _downloadTracker);
+            _downloadEngine.Start();
+
+            //
+            while (State < DownloadEngine.DwnlState.Complete &&
+                   (_downloadEngine == null || !_downloadEngine.IsStateCompleted))
+                try
+                {
+                    using (await new SemaphoreSlim(0, 1).UseWaitAsync(ct))
+                    {
+                    }
+                    ct.ThrowIfCancellationRequested();
+                }
+                catch (OperationCanceledException)
+                {
+                    Abort();
+                }
+
+            if (State == DownloadEngine.DwnlState.Complete)
+                return;
+
+            // ReSharper disable once SwitchStatementMissingSomeCases
+            switch (State)
+            {
+                case DownloadEngine.DwnlState.Idle:
+                    if (Error != null)
+                        throw Error;
+                    else
+                        throw new OperationCanceledException(ct);
+                case DownloadEngine.DwnlState.Error:
+                    throw Error;
+                case DownloadEngine.DwnlState.Abort:
+                    throw new OperationCanceledException(ct);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(State), State, null);
+            }
+        }
+
+        public void Pause()
+        {
+            _downloadEngine.Abort();
+        }
+
+        private void Abort()
+        {
+            _downloadEngine.Abort().Join();
+        }
+
+        public async Task ResumeAndWait(CancellationToken ct = default(CancellationToken))
+        {
+            if (State == DownloadEngine.DwnlState.Invalid)
+                throw new Exception();
+
+            _downloadEngine.Start();
+
+            //
             while (State < DownloadEngine.DwnlState.Complete &&
                    (_downloadEngine == null || !_downloadEngine.IsStateCompleted))
                 try
@@ -80,47 +152,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.ChunkDownloader
                 default:
                     throw new ArgumentOutOfRangeException(nameof(State), State, null);
             }
-        }
-
-        private async Task StartDownload(CancellationToken ct)
-        {
-            if (State != DownloadEngine.DwnlState.Invalid)
-                throw new Exception();
-
-            //create a new download job
-            _download = new Download(_dwnlSource, _dwnlTarget, _cacheFolder);
-
-            //stop the download tracker and engine if they exist
-            _downloadTracker?.Stop();
-            _downloadEngine?.Abort().Join();
-            //create the tracker, engine
-            _downloadTracker = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
-
-            _downloadTracker.Tick += (o, eventArgs) => OnProgressChanged();
-            _downloadTracker.Start();
-
-            //create the engine
-            _downloadEngine = new DownloadEngine(_download, _downloadTracker);
-            _downloadEngine.Start();
-
-            using (await new SemaphoreSlim(0, 1).UseWaitAsync(ct))
-            {
-            }
-        }
-
-        public void Pause()
-        {
-            _downloadEngine.Abort();
-        }
-
-        public void Abort()
-        {
-            _downloadEngine.Abort().Join();
-        }
-
-        public void Resume()
-        {
-            _downloadEngine.Start();
         }
 
         public event EventHandler ProgressChanged;
