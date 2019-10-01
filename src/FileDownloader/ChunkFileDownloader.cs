@@ -30,7 +30,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             DwnlTarget = outputFileName;
             _tmpFolder = tmpFolder;
             _stopwatch = new Stopwatch();
-            
+
             ServicePointManager.Expect100Continue = false;
             ServicePointManager.DefaultConnectionLimit = 100;
             ServicePointManager.MaxServicePointIdleTime = 1000;
@@ -54,7 +54,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public async Task Download(CancellationToken ct = default(CancellationToken))
         {
-            if(State == FileDownloaderState.Download)
+            if (State == FileDownloaderState.Download)
                 return;
 
             //
@@ -74,7 +74,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             {
                 _stopwatch.Reset();
                 _stopwatch.Start();
-                using (new Timer(ReportProgress, new object(), 1000, 1000))
+                using (var timer = new Timer(ReportProgress, new object(), 1000, 1000))
                 {
                     //Handle number of parallel downloads
                     var numberOfParallelDownloads = Environment.ProcessorCount > MaxChunkCount

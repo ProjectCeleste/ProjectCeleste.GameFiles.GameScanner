@@ -14,7 +14,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public class SimpleFileDownloader : IFileDownloader
     {
-
         private readonly Stopwatch _stopwatch;
 
         public SimpleFileDownloader(string httpLink, string outputFileName)
@@ -65,7 +64,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     // ReSharper disable once AccessToDisposedClosure
                     webClient.CancelAsync();
                 }, true);
-                
+
                 try
                 {
                     _stopwatch.Reset();
@@ -93,6 +92,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 }
             }
         }
+
+        public event EventHandler ProgressChanged;
 
         private void DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
@@ -127,8 +128,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             //
             OnProgressChanged();
         }
-
-        public event EventHandler ProgressChanged;
 
         protected virtual void OnProgressChanged()
         {

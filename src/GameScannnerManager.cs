@@ -340,38 +340,38 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 : new SimpleFileDownloader(fileInfo.HttpLink, tempFileName);
 
             if (progress != null)
-                    fileDownloader.ProgressChanged += (sender, eventArg) =>
+                fileDownloader.ProgressChanged += (sender, eventArg) =>
+                {
+                    switch (fileDownloader.State)
                     {
-                        switch (fileDownloader.State)
-                        {
-                            case FileDownloaderState.Invalid:
-                            case FileDownloaderState.Complete:
-                            case FileDownloaderState.Download:
-                                progress.Report(new ScanAndRepairSubProgress(
-                                    ScanAndRepairSubProgressStep.Downloading,
-                                    $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} ({BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSpeed)}ps)",
-                                    (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress / 100 *
-                                    (ScanAndRepairSubProgressStep.CheckingDownload -
-                                     ScanAndRepairSubProgressStep.Downloading)));
-                                break;
-                            case FileDownloaderState.Error:
-                            case FileDownloaderState.Abort:
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException(nameof(fileDownloader.State),
-                                    fileDownloader.State, null);
-                        }
-                    };
+                        case FileDownloaderState.Invalid:
+                        case FileDownloaderState.Complete:
+                        case FileDownloaderState.Download:
+                            progress.Report(new ScanAndRepairSubProgress(
+                                ScanAndRepairSubProgressStep.Downloading,
+                                $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} ({fileDownloader.DwnlSpeed.FormatToBytesSizeAlt()}ps)",
+                                (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress / 100 *
+                                (ScanAndRepairSubProgressStep.CheckingDownload -
+                                 ScanAndRepairSubProgressStep.Downloading)));
+                            break;
+                        case FileDownloaderState.Error:
+                        case FileDownloaderState.Abort:
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException(nameof(fileDownloader.State),
+                                fileDownloader.State, null);
+                    }
+                };
 
-                try
-                {
-                    await fileDownloader.Download(ct);
-                }
-                catch (Exception e)
-                {
-                    throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
-                                        $"{e}");
-                }
+            try
+            {
+                await fileDownloader.Download(ct);
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
+                                    $"{e.Message}");
+            }
 
             //#3 Check Downloaded File
             ct.ThrowIfCancellationRequested();
