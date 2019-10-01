@@ -17,11 +17,14 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public class ChunkFileDownloader : IFileDownloader
     {
-        private const int ChunkBufferSize = 32 * BytesSizeExtension.Kb; //32Kb
+        private const int ChunkBufferSize = 8 * BytesSizeExtension.Kb; //8Kb
         private const int ChunkSizeLimit = 10 * BytesSizeExtension.Mb; //10Mb
+        private const int ParallelDownloadLimit = 10;
 
         private readonly Stopwatch _stopwatch;
+        private readonly int _parallelDownloadLimit;
         private readonly string _tmpFolder;
+
         private long _dwnlSizeCompleted;
 
         public ChunkFileDownloader(string httpLink, string outputFileName, string tmpFolder)
@@ -30,7 +33,9 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             DwnlTarget = outputFileName;
             _tmpFolder = tmpFolder;
             _stopwatch = new Stopwatch();
-
+            _parallelDownloadLimit = Environment.ProcessorCount > ParallelDownloadLimit
+                ? ParallelDownloadLimit
+                : Environment.ProcessorCount;
             ServicePointManager.Expect100Continue = false;
             ServicePointManager.DefaultConnectionLimit = 100;
             ServicePointManager.MaxServicePointIdleTime = 1000;
@@ -82,6 +87,9 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 //
                 _stopwatch.Start();
 
+                //
+                OnProgressChanged();
+
                 //Get file size
                 var webRequest = WebRequest.Create(DwnlSource);
                 webRequest.Method = "HEAD";
@@ -102,89 +110,94 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     readRanges.Add(new Range(chunkStart, chunkEnd));
                 }
 
-                using (new Timer(ReportProgress, new object(), 500, 500))
+                //Parallel download
+                var timerSync = new object();
+                using (new Timer(ReportProgress, timerSync, 500, 500))
                 {
-                    using (var destinationStream =
-                        new FileStream(DwnlTarget, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        //Parallel download
-                        var tempFilesDictionary = new ConcurrentDictionary<long, string>();
-                        Parallel.ForEach(readRanges,
-                            (readRange, state) =>
+                    var tempFilesDictionary = new ConcurrentDictionary<long, string>();
+                    Parallel.ForEach(readRanges,
+                        new ParallelOptions {MaxDegreeOfParallelism = _parallelDownloadLimit},
+                        (readRange, state) =>
+                        {
+                            try
                             {
+                                var dwnlReq = WebRequest.CreateHttp(DwnlSource);
+                                dwnlReq.AllowAutoRedirect = true;
+                                dwnlReq.AddRange(readRange.Start, readRange.End);
+                                dwnlReq.ServicePoint.ConnectionLimit = 100;
+                                dwnlReq.ServicePoint.Expect100Continue = false;
                                 try
                                 {
-                                    var dwnlReq = WebRequest.CreateHttp(DwnlSource);
-                                    dwnlReq.AllowAutoRedirect = true;
-                                    dwnlReq.AddRange(readRange.Start, readRange.End);
-                                    dwnlReq.ServicePoint.ConnectionLimit = 100;
-                                    dwnlReq.ServicePoint.Expect100Continue = false;
-                                    try
+                                    var tempFilePath =
+                                        Path.Combine(_tmpFolder,
+                                            $"0x{DwnlSource.ToLower().GetHashCode():X4}.0x{readRange.Start:X8}.tmp");
+                                    using (var dwnlRes = (HttpWebResponse) dwnlReq.GetResponse())
+                                    using (var dwnlSource = dwnlRes.GetResponseStream())
                                     {
-                                        var tempFilePath =
-                                            Path.Combine(_tmpFolder,
-                                                $"0x{DwnlSource.ToLower().GetHashCode():X4}.0x{readRange.Start:X8}.tmp");
-                                        using (var dwnlRes = (HttpWebResponse) dwnlReq.GetResponse())
-                                        using (var dwnlSource = dwnlRes.GetResponseStream())
+                                        using (var dwnlTarget =
+                                            new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
                                         {
-                                            using (var dwnlTarget =
-                                                new FileStream(tempFilePath, FileMode.Create, FileAccess.Write,
-                                                    FileShare.None))
+                                            int bufferedSize;
+                                            var buffer = new byte[ChunkBufferSize];
+                                            do
                                             {
-                                                int bufferedSize;
-                                                var buffer = new byte[ChunkBufferSize];
-                                                do
-                                                {
-                                                    //
-                                                    ct.ThrowIfCancellationRequested();
+                                                //
+                                                ct.ThrowIfCancellationRequested();
 
-                                                    //
-                                                    var bufferedRead =
-                                                        dwnlSource.ReadAsync(buffer, 0, ChunkBufferSize, ct);
-                                                    bufferedRead.Wait(ct);
-                                                    bufferedSize = bufferedRead.Result;
+                                                //
+                                                var bufferedRead =
+                                                    dwnlSource.ReadAsync(buffer, 0, ChunkBufferSize, ct);
+                                                bufferedRead.Wait(ct);
+                                                bufferedSize = bufferedRead.Result;
 
-                                                    //
-                                                    dwnlTarget.Write(buffer, 0, bufferedSize);
+                                                //
+                                                dwnlTarget.Write(buffer, 0, bufferedSize);
 
-                                                    //
-                                                    Interlocked.Add(ref _dwnlSizeCompleted, bufferedSize);
-                                                } while (bufferedSize > 0);
-                                            }
-                                            if (!tempFilesDictionary.TryAdd(readRange.Start, tempFilePath))
-                                                throw new Exception();
+                                                //
+                                                Interlocked.Add(ref _dwnlSizeCompleted, bufferedSize);
+                                            } while (bufferedSize > 0);
                                         }
-                                    }
-                                    finally
-                                    {
-                                        dwnlReq.Abort();
+                                        if (!tempFilesDictionary.TryAdd(readRange.Start, tempFilePath))
+                                            throw new Exception();
                                     }
                                 }
-                                catch (Exception)
+                                finally
                                 {
-                                    state.Break();
-                                    throw;
+                                    dwnlReq.Abort();
                                 }
-                            });
+                            }
+                            catch (Exception)
+                            {
+                                state.Break();
+                                throw;
+                            }
+                        });
 
-                        //
-                        _stopwatch.Stop();
+                    //
+                    _stopwatch.Stop();
 
-                        //
-                        if (DwnlSizeCompleted != DwnlSize)
-                            throw new Exception("Incomplete download");
+                    //
+                    if (DwnlSizeCompleted != DwnlSize)
+                        throw new Exception("Incomplete download");
 
-                        //Merge to single file
+                    //
+                    State = FileDownloaderState.Finalize;
+                    ReportProgress(timerSync); //Forced
+
+                    //Merge to single file
+                    using (var targetFile =
+                        new BufferedStream(new FileStream(DwnlTarget, FileMode.Create, FileAccess.Write)))
+                    {
                         foreach (var tempFile in tempFilesDictionary.ToArray().OrderBy(b => b.Key))
-                        {
-                            var tempFileBytes = File.ReadAllBytes(tempFile.Value);
-                            destinationStream.Write(tempFileBytes, 0, tempFileBytes.Length);
-                            File.Delete(tempFile.Value);
-                        }
-
-                        //
-                        State = FileDownloaderState.Complete;
+                            using (var sourceChunks = new BufferedStream(File.OpenRead(tempFile.Value)))
+                            {
+                                sourceChunks.CopyTo(targetFile);
+                            }
                     }
+
+                    //
+                    State = FileDownloaderState.Complete;
+                    ReportProgress(timerSync); //Forced
                 }
             }
             catch (Exception e)
