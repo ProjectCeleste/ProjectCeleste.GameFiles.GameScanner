@@ -12,17 +12,8 @@ using System.Threading.Tasks;
 
 namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
-    public class SimpleFileDownloader
+    public class SimpleFileDownloader : IFileDownloader
     {
-        public enum DwnlState
-        {
-            Invalid,
-            Create,
-            Download,
-            Complete,
-            Error,
-            Abort
-        }
 
         private readonly Stopwatch _stopwatch;
 
@@ -33,13 +24,13 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             _stopwatch = new Stopwatch();
         }
 
-        public DwnlState State { get; private set; } = DwnlState.Invalid;
+        public FileDownloaderState State { get; private set; } = FileDownloaderState.Invalid;
 
         public double DwnlProgress { get; private set; }
 
         public long DwnlSize { get; private set; }
 
-        public double DwnlSizeCompleted { get; private set; }
+        public long DwnlSizeCompleted { get; private set; }
 
         public string DwnlSource { get; }
 
@@ -49,16 +40,20 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public Exception Error { get; private set; }
 
-        public async Task StartAndWait(CancellationToken ct = default(CancellationToken))
+        public async Task Download(CancellationToken ct = default(CancellationToken))
         {
+            if (State == FileDownloaderState.Download)
+                return;
+
+            //
+            State = FileDownloaderState.Download;
+
             var path = Path.GetDirectoryName(DwnlTarget);
             if (path != null && !Directory.Exists(path))
                 Directory.CreateDirectory(path);
 
             using (var webClient = new WebClient())
             {
-                State = DwnlState.Create;
-
                 //
                 webClient.DownloadFileCompleted += DownloadCompleted;
                 webClient.DownloadProgressChanged += DownloadProgressChanged;
@@ -70,10 +65,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     // ReSharper disable once AccessToDisposedClosure
                     webClient.CancelAsync();
                 }, true);
-
-                //
-                State = DwnlState.Download;
-
+                
                 try
                 {
                     _stopwatch.Reset();
@@ -83,18 +75,18 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 finally
                 {
                     _stopwatch.Stop();
-                    //webClient.CancelAsync();
+                    webClient.CancelAsync();
                     cancel.Dispose();
                 }
 
                 // ReSharper disable once SwitchStatementMissingSomeCases
                 switch (State)
                 {
-                    case DwnlState.Error:
+                    case FileDownloaderState.Error:
                         throw Error;
-                    case DwnlState.Abort:
+                    case FileDownloaderState.Abort:
                         throw new OperationCanceledException(ct);
-                    case DwnlState.Complete:
+                    case FileDownloaderState.Complete:
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(nameof(State), State, null);
@@ -118,18 +110,18 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             if (e.Error != null)
             {
                 Error = e.Error;
-                State = DwnlState.Error;
+                State = FileDownloaderState.Error;
             }
             else if (e.Cancelled)
             {
                 Error = new OperationCanceledException();
-                State = DwnlState.Abort;
+                State = FileDownloaderState.Abort;
             }
             else
             {
                 Error = null;
                 DwnlProgress = 100;
-                State = DwnlState.Complete;
+                State = FileDownloaderState.Complete;
             }
 
             //

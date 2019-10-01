@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace ProjectCeleste.GameFiles.GameScanner.Utils
 {
-    public static class SemaphoreSlimExtensions
+    public static class SemaphoreSlimExtension
     {
         public static async Task<IDisposable> UseWaitAsync(
             this SemaphoreSlim semaphore,
