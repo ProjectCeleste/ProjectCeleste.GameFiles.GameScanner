@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using ProjectCeleste.GameFiles.GameScanner.Utils;
 
 #endregion
 
@@ -16,9 +17,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public class ChunkFileDownloader : IFileDownloader
     {
-        private const int ChunkBufferSize = 8 * 1024; //8Kb
-        private const int MinChunkSize = 5 * 1024 * 1024; //5Mb
-        private const int MaxChunkCount = 10;
+        private const int ChunkBufferSize = 8 * BytesSizeExtension.Kb; //8Kb
+        private const int ChunkSizeLimit = 10 * BytesSizeExtension.Mb; //10Mb
 
         private readonly Stopwatch _stopwatch;
         private readonly string _tmpFolder;
@@ -74,27 +74,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             {
                 _stopwatch.Reset();
                 _stopwatch.Start();
-                using (var timer = new Timer(ReportProgress, new object(), 1000, 1000))
+                using (new Timer(ReportProgress, new object(), 500, 500))
                 {
-                    //Handle number of parallel downloads
-                    var numberOfParallelDownloads = Environment.ProcessorCount > MaxChunkCount
-                        ? MaxChunkCount
-                        : Environment.ProcessorCount;
-                    if (MinChunkSize > (double) DwnlSize / numberOfParallelDownloads)
-                        if (DwnlSize > MinChunkSize)
-                        {
-                            var chunkCount = (double) DwnlSize / MinChunkSize + 1;
-                            numberOfParallelDownloads = Environment.ProcessorCount < chunkCount
-                                ? Environment.ProcessorCount
-                                : (int) chunkCount;
-                        }
-                        else
-                        {
-                            numberOfParallelDownloads = 1;
-                        }
-                    if (numberOfParallelDownloads < 1)
-                        numberOfParallelDownloads = 1;
-
                     //Get file size
                     var webRequest = WebRequest.Create(DwnlSource);
                     webRequest.Method = "HEAD";
@@ -103,25 +84,25 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                         DwnlSize = long.Parse(webResponse.Headers.Get("Content-Length"));
                     }
 
+                    //Calculate ranges
+                    var chunckCount = DwnlSize / ChunkSizeLimit + (DwnlSize % ChunkSizeLimit > 0 ? 1 : 0);
+                    var readRanges = new List<Range>();
+                    for (var chunk = 0; chunk < chunckCount - 1; chunk++)
+                    {
+                        var range = new Range(chunk * (DwnlSize / chunckCount),
+                            (chunk + 1) * (DwnlSize / chunckCount) - 1);
+                        readRanges.Add(range);
+                    }
+
+                    readRanges.Add(new Range(readRanges.Any() ? readRanges.Last().End + 1 : 0, DwnlSize - 1));
+
                     using (var destinationStream =
                         new FileStream(DwnlTarget, FileMode.Create, FileAccess.Write, FileShare.None))
                     {
-                        //Calculate ranges
-                        var readRanges = new List<Range>();
-                        for (var chunk = 0; chunk < numberOfParallelDownloads - 1; chunk++)
-                        {
-                            var range = new Range(chunk * (DwnlSize / numberOfParallelDownloads),
-                                (chunk + 1) * (DwnlSize / numberOfParallelDownloads) - 1);
-                            readRanges.Add(range);
-                        }
-
-                        readRanges.Add(new Range(readRanges.Any() ? readRanges.Last().End + 1 : 0, DwnlSize - 1));
-
                         //Parallel download
                         var tempFilesDictionary = new ConcurrentDictionary<long, string>();
                         Parallel.ForEach(readRanges,
-                            new ParallelOptions {MaxDegreeOfParallelism = numberOfParallelDownloads},
-                            async (readRange, state) =>
+                            (readRange, state) =>
                             {
                                 try
                                 {
@@ -133,7 +114,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                                         var tempFilePath =
                                             Path.Combine(_tmpFolder,
                                                 $"0x{DwnlSource.ToLower().GetHashCode():X4}.0x{readRange.Start:X8}.tmp");
-                                        using (var dwnlRes = (HttpWebResponse) await dwnlReq.GetResponseAsync())
+                                        using (var dwnlRes = (HttpWebResponse) dwnlReq.GetResponse())
                                         using (var dwnlSource = dwnlRes.GetResponseStream())
                                         {
                                             using (var dwnlTarget =
@@ -144,11 +125,14 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                                                 var buffer = new byte[ChunkBufferSize];
                                                 do
                                                 {
+                                                    //
                                                     ct.ThrowIfCancellationRequested();
 
                                                     //
-                                                    bufferedSize =
-                                                        await dwnlSource.ReadAsync(buffer, 0, ChunkBufferSize, ct);
+                                                    var bufferedRead =
+                                                        dwnlSource.ReadAsync(buffer, 0, ChunkBufferSize, ct);
+                                                    bufferedRead.Wait(ct);
+                                                    bufferedSize = bufferedRead.Result;
 
                                                     //
                                                     dwnlTarget.Write(buffer, 0, bufferedSize);
@@ -172,6 +156,13 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                                     throw;
                                 }
                             });
+
+                        if (DwnlSizeCompleted != DwnlSize)
+                        {
+                            Error = new Exception("Incomplete download");
+                            State = FileDownloaderState.Error;
+                            throw Error;
+                        }
 
                         //Merge to single file
                         foreach (var tempFile in tempFilesDictionary.ToArray().OrderBy(b => b.Key))
