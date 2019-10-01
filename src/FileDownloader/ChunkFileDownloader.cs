@@ -17,12 +17,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public class ChunkFileDownloader : IFileDownloader
     {
-        private const int ChunkBufferSize = 8 * BytesSizeExtension.Kb; //8Kb
+        private const int ChunkBufferSize = 32 * BytesSizeExtension.Kb; //32Kb
         private const int ChunkSizeLimit = 10 * BytesSizeExtension.Mb; //10Mb
         private const int ParallelDownloadLimit = 10;
+        private readonly int _parallelDownloadLimit;
 
         private readonly Stopwatch _stopwatch;
-        private readonly int _parallelDownloadLimit;
         private readonly string _tmpFolder;
 
         private long _dwnlSizeCompleted;
@@ -56,7 +56,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             get
             {
                 double recvBytes = DwnlSizeCompleted;
-                return recvBytes > 0 ? recvBytes / _stopwatch.Elapsed.Seconds : 0;
+                return recvBytes > 0 ? recvBytes / ((double) _stopwatch.ElapsedMilliseconds / 1000) : 0;
             }
         }
 
@@ -115,7 +115,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 using (new Timer(ReportProgress, timerSync, 500, 500))
                 {
                     var tempFilesDictionary = new ConcurrentDictionary<long, string>();
-                    Parallel.ForEach(readRanges,
+                    var parallel = Parallel.ForEach(readRanges,
                         new ParallelOptions {MaxDegreeOfParallelism = _parallelDownloadLimit},
                         (readRange, state) =>
                         {
@@ -173,6 +173,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                             }
                         });
 
+                    if (!parallel.IsCompleted)
+                        throw new Exception("!parallel.IsCompleted");
                     //
                     _stopwatch.Stop();
 
