@@ -27,10 +27,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private static readonly string GameScannerTempPath =
             Path.Combine(GameScannerPath, "Temp");
-
-        private static readonly string GameScannerCachePath =
-            Path.Combine(GameScannerPath, "Cache");
-
+        
         private readonly string _filesRootPath;
 
         private readonly bool _isSteam;
@@ -345,7 +342,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     switch (fileDownloader.State)
                     {
                         case FileDownloaderState.Invalid:
-                        case FileDownloaderState.Complete:
                         case FileDownloaderState.Download:
                             progress.Report(new ScanAndRepairSubProgress(
                                 ScanAndRepairSubProgressStep.Downloading,
@@ -353,6 +349,18 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress / 100 *
                                 (ScanAndRepairSubProgressStep.CheckingDownload -
                                  ScanAndRepairSubProgressStep.Downloading)));
+                            break;
+                        case FileDownloaderState.Finalize:
+                            progress.Report(new ScanAndRepairSubProgress(
+                                ScanAndRepairSubProgressStep.Downloading,
+                                $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} (finalize)",
+                                (int) ScanAndRepairSubProgressStep.CheckingDownload));
+                            break;
+                        case FileDownloaderState.Complete:
+                            progress.Report(new ScanAndRepairSubProgress(
+                                ScanAndRepairSubProgressStep.Downloading,
+                                $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} (complete)",
+                                (int) ScanAndRepairSubProgressStep.CheckingDownload));
                             break;
                         case FileDownloaderState.Error:
                         case FileDownloaderState.Abort:
