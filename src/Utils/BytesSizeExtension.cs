@@ -10,9 +10,9 @@ namespace ProjectCeleste.GameFiles.GameScanner.Utils
     {
         public const int Kb = 1024;
 
-        public const long Mb = Kb * Kb;
+        public const int Mb = Kb * Kb;
 
-        public const long Gb = Kb * Mb;
+        public const int Gb = Kb * Mb;
 
         public static string FormatToBytesSize(this double value)
         {
