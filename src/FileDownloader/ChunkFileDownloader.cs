@@ -46,7 +46,14 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public string DwnlSource { get; }
 
-        public double DwnlSpeed => DwnlSize > 0 ? (double) DwnlSizeCompleted / _stopwatch.Elapsed.Seconds : 0;
+        public double DwnlSpeed
+        {
+            get
+            {
+                double recvBytes = DwnlSizeCompleted;
+                return recvBytes > 0 ? recvBytes / _stopwatch.Elapsed.Seconds : 0;
+            }
+        }
 
         public string DwnlTarget { get; }
 
@@ -59,8 +66,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
             //
             State = FileDownloaderState.Download;
-
-            _dwnlSizeCompleted = 0;
+            Interlocked.Exchange(ref _dwnlSizeCompleted, 0);
+            _stopwatch.Reset();
 
             //
             var path = Path.GetDirectoryName(DwnlTarget);
@@ -72,6 +79,9 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             //
             try
             {
+                //
+                _stopwatch.Start();
+
                 //Get file size
                 var webRequest = WebRequest.Create(DwnlSource);
                 webRequest.Method = "HEAD";
@@ -91,10 +101,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
                     readRanges.Add(new Range(chunkStart, chunkEnd));
                 }
-
-                //
-                _stopwatch.Reset();
-                _stopwatch.Start();
 
                 using (new Timer(ReportProgress, new object(), 500, 500))
                 {
@@ -161,12 +167,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                                 }
                             });
 
+                        //
+                        _stopwatch.Stop();
+
+                        //
                         if (DwnlSizeCompleted != DwnlSize)
-                        {
-                            Error = new Exception("Incomplete download");
-                            State = FileDownloaderState.Error;
-                            throw Error;
-                        }
+                            throw new Exception("Incomplete download");
 
                         //Merge to single file
                         foreach (var tempFile in tempFilesDictionary.ToArray().OrderBy(b => b.Key))
@@ -181,23 +187,15 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     }
                 }
             }
-            catch (OperationCanceledException e)
-            {
-                //
-                Error = e;
-                State = FileDownloaderState.Abort;
-                throw;
-            }
             catch (Exception e)
             {
-                //
+                _stopwatch.Stop();
                 Error = e;
-                State = FileDownloaderState.Error;
+                State = e is OperationCanceledException ? FileDownloaderState.Abort : FileDownloaderState.Error;
                 throw;
             }
             finally
             {
-                _stopwatch.Stop();
                 OnProgressChanged();
             }
         }
