@@ -17,7 +17,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public class ChunkFileDownloader : IFileDownloader
     {
-        private const int ChunkBufferSize = 8 * BytesSizeExtension.Kb; //8Kb
+        private const int ChunkBufferSize = 32 * BytesSizeExtension.Kb; //32Kb
         private const int ChunkSizeLimit = 10 * BytesSizeExtension.Mb; //10Mb
 
         private readonly Stopwatch _stopwatch;
@@ -72,30 +72,32 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             //
             try
             {
+                //Get file size
+                var webRequest = WebRequest.Create(DwnlSource);
+                webRequest.Method = "HEAD";
+                using (var webResponse = await webRequest.GetResponseAsync())
+                {
+                    DwnlSize = long.Parse(webResponse.Headers.Get("Content-Length"));
+                }
+
+                //Calculate ranges
+                var readRanges = new List<Range>();
+                for (var chunkIndex = 0;
+                    chunkIndex < DwnlSize / ChunkSizeLimit + (DwnlSize % ChunkSizeLimit > 0 ? 1 : 0);
+                    chunkIndex++)
+                {
+                    var chunkStart = ChunkSizeLimit * chunkIndex;
+                    var chunkEnd = Math.Min(chunkStart + ChunkSizeLimit - 1, DwnlSize);
+
+                    readRanges.Add(new Range(chunkStart, chunkEnd));
+                }
+
+                //
                 _stopwatch.Reset();
                 _stopwatch.Start();
+
                 using (new Timer(ReportProgress, new object(), 500, 500))
                 {
-                    //Get file size
-                    var webRequest = WebRequest.Create(DwnlSource);
-                    webRequest.Method = "HEAD";
-                    using (var webResponse = await webRequest.GetResponseAsync())
-                    {
-                        DwnlSize = long.Parse(webResponse.Headers.Get("Content-Length"));
-                    }
-
-                    //Calculate ranges
-                    var chunckCount = DwnlSize / ChunkSizeLimit + (DwnlSize % ChunkSizeLimit > 0 ? 1 : 0);
-                    var readRanges = new List<Range>();
-                    for (var chunk = 0; chunk < chunckCount - 1; chunk++)
-                    {
-                        var range = new Range(chunk * (DwnlSize / chunckCount),
-                            (chunk + 1) * (DwnlSize / chunckCount) - 1);
-                        readRanges.Add(range);
-                    }
-
-                    readRanges.Add(new Range(readRanges.Any() ? readRanges.Last().End + 1 : 0, DwnlSize - 1));
-
                     using (var destinationStream =
                         new FileStream(DwnlTarget, FileMode.Create, FileAccess.Write, FileShare.None))
                     {
@@ -107,10 +109,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                                 try
                                 {
                                     var dwnlReq = WebRequest.CreateHttp(DwnlSource);
+                                    dwnlReq.AllowAutoRedirect = true;
+                                    dwnlReq.AddRange(readRange.Start, readRange.End);
+                                    dwnlReq.ServicePoint.ConnectionLimit = 100;
+                                    dwnlReq.ServicePoint.Expect100Continue = false;
                                     try
                                     {
-                                        dwnlReq.AllowAutoRedirect = true;
-                                        dwnlReq.AddRange(readRange.Start, readRange.End);
                                         var tempFilePath =
                                             Path.Combine(_tmpFolder,
                                                 $"0x{DwnlSource.ToLower().GetHashCode():X4}.0x{readRange.Start:X8}.tmp");
