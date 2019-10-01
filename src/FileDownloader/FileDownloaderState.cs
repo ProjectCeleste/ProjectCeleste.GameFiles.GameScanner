@@ -4,6 +4,7 @@
     {
         Invalid,
         Download,
+        Finalize,
         Complete,
         Error,
         Abort
