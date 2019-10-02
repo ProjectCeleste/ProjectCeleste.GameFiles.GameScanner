@@ -290,7 +290,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         {
             var filePath = Path.Combine(gameFilePath, fileInfo.FileName);
 
-            //#1 Check   File
+            //#1 Check File
             ct.ThrowIfCancellationRequested();
             progress?.Report(new ScanSubProgress(ScanSubProgressStep.Check, 0));
 
