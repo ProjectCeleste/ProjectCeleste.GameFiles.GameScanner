@@ -363,7 +363,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             catch (Exception e)
             {
                 throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
-                                    $"{e}");
+                                    $"{e.Message}");
             }
 
             //#3 Check Downloaded File
