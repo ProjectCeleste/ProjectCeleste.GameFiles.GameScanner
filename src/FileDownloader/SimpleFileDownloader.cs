@@ -73,6 +73,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     try
                     {
                         await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
+                        if (DwnlSizeCompleted == DwnlSize)
+                            State = FileDownloaderState.Complete;
                     }
                     finally
                     {
@@ -81,7 +83,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                         cancel.Dispose();
                     }
                 }
-
                 // ReSharper disable once SwitchStatementMissingSomeCases
                 switch (State)
                 {
@@ -124,6 +125,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             {
                 Error = null;
                 DwnlProgress = 100;
+                DwnlSizeCompleted = DwnlSize;
                 State = FileDownloaderState.Complete;
             }
         }
