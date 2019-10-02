@@ -9,7 +9,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using ProjectCeleste.GameFiles.GameScanner.Utils;
 
 #endregion
 
@@ -17,10 +16,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public class ChunkFileDownloader : IFileDownloader
     {
-        private const int ChunkBufferSize = 32 * BytesSizeExtension.Kb; //32Kb
-        private const int ChunkSizeLimit = 10 * BytesSizeExtension.Mb; //10Mb
-        private const int ParallelDownloadLimit = 10;
-        private readonly int _parallelDownloadLimit;
+        private const int ChunkBufferSize = 32 * 1024; //32Kb
+        internal const int ChunkSizeLimit = 10 * 1024 * 1024; //10Mb
 
         private readonly Stopwatch _stopwatch;
         private readonly string _tmpFolder;
@@ -33,9 +30,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             DwnlTarget = outputFileName;
             _tmpFolder = tmpFolder;
             _stopwatch = new Stopwatch();
-            _parallelDownloadLimit = Environment.ProcessorCount > ParallelDownloadLimit
-                ? ParallelDownloadLimit
-                : Environment.ProcessorCount;
             ServicePointManager.Expect100Continue = false;
             ServicePointManager.DefaultConnectionLimit = 100;
             ServicePointManager.MaxServicePointIdleTime = 1000;
@@ -116,7 +110,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 {
                     var tempFilesDictionary = new ConcurrentDictionary<long, string>();
                     var parallel = Parallel.ForEach(readRanges,
-                        new ParallelOptions {MaxDegreeOfParallelism = _parallelDownloadLimit},
                         (readRange, state) =>
                         {
                             try
@@ -134,6 +127,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                                     using (var dwnlRes = (HttpWebResponse) dwnlReq.GetResponse())
                                     using (var dwnlSource = dwnlRes.GetResponseStream())
                                     {
+                                        if (dwnlSource == null)
+                                            throw new Exception("dwnlSource == null");
                                         using (var dwnlTarget =
                                             new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
                                         {

@@ -125,7 +125,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
                 if (value == null)
                     return;
                 foreach (var item in value)
-                    GameFileInfo.Add(item.FileName.ToLower(), item);
+                    GameFileInfo.Add(item.FileName, item);
             }
         }
     }

@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
-using ProjectCeleste.GameFiles.GameScanner.Utils;
 using ProjectCeleste.GameFiles.Tools.L33TZip;
 using ProjectCeleste.GameFiles.Tools.Misc;
 using ProjectCeleste.GameFiles.Tools.Xml;
@@ -22,11 +21,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
 {
     public class GameScannnerManager : IDisposable
     {
-        private static readonly string GameScannerPath =
-            Path.Combine(Path.GetTempPath(), "ProjectCeleste.GameFiles.GameScannner");
-
         private static readonly string GameScannerTempPath =
-            Path.Combine(GameScannerPath, "Temp");
+            Path.Combine(Path.GetTempPath(), "ProjectCeleste.GameFiles.GameScannner", "Temp");
         
         private readonly string _filesRootPath;
 
@@ -47,7 +43,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         {
         }
 
-        public GameScannnerManager(string filesRootPath, bool useChunkDownloader = false, bool isSteam = false)
+        public GameScannnerManager(string filesRootPath, bool useChunkDownloader, bool isSteam = false)
         {
             if (string.IsNullOrEmpty(filesRootPath))
                 throw new ArgumentException("Game files path is null or empty!", nameof(filesRootPath));
@@ -102,7 +98,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             _filesInfo = fileInfos;
         }
 
-        public async Task<bool> Scan(bool quick = true, IProgress<ScanAndRepairProgress> progress = null)
+        public async Task<bool> Scan(bool quick = true, IProgress<ScanProgress> progress = null)
         {
             if (_filesInfo == null || !_filesInfo.Any())
                 throw new Exception("Not Initialized");
@@ -123,6 +119,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 {
                     var totalSize = _filesInfo.Select(key => key.Size).Sum();
                     var currentSize = 0L;
+                    var index = 0;
+                    var totalIndex = _filesInfo.Count();
                     Parallel.ForEach(_filesInfo, async (fileInfo, state) =>
                     {
                         try
@@ -143,10 +141,12 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 state.Break();
                             }
 
+                            var currentIndex = Interlocked.Increment(ref index);
                             double newSize = Interlocked.Add(ref currentSize, fileInfo.Size);
 
                             progress?.Report(
-                                new ScanAndRepairProgress("Quick Scan", "", newSize / totalSize * 100));
+                                new ScanProgress(fileInfo.FileName, newSize / totalSize * 100, currentIndex,
+                                    totalIndex));
                         }
                         else
                         {
@@ -157,9 +157,11 @@ namespace ProjectCeleste.GameFiles.GameScanner
                                 state.Break();
                             }
 
+                            var currentIndex = Interlocked.Increment(ref index);
                             double newSize = Interlocked.Add(ref currentSize, fileInfo.Size);
 
-                            progress?.Report(new ScanAndRepairProgress("Full Scan", "", newSize / totalSize * 100));
+                            progress?.Report(new ScanProgress(fileInfo.FileName, newSize / totalSize * 100,
+                                currentIndex, totalIndex));
                         }
                     });
                 }, token);
@@ -172,7 +174,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return retVal;
         }
 
-        public async Task<bool> ScanAndRepair(IProgress<ScanAndRepairProgress> progress = null)
+        public async Task<bool> ScanAndRepair(IProgress<ScanProgress> progress = null, IProgress<ScanSubProgress> subProgress = null)
         {
             if (_filesInfo == null || !_filesInfo.Any())
                 throw new Exception("Not Initialized");
@@ -200,19 +202,16 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     var totalSize = _filesInfo.Select(key => key.BinSize).Sum();
                     const long currentSize = 0L;
                     _globalProgress = currentSize;
-                    foreach (var fileInfo in _filesInfo.OrderByDescending(key => key.FileName.Contains("\\"))
-                        .ThenBy(key => key.FileName))
+                    var totalIndex = _filesInfo.Count();
+                    var filesArray = _filesInfo.OrderByDescending(key => key.FileName.Contains("\\"))
+                        .ThenBy(key => key.FileName).ToArray();
+                    for (var i = 0; i < filesArray.Length; i++)
                     {
                         token.ThrowIfCancellationRequested();
 
-                        var fileProgress = new Progress<ScanAndRepairSubProgress>();
-                        if (progress != null)
-                            fileProgress.ProgressChanged += (o, ea) =>
-                            {
-                                progress.Report(new ScanAndRepairProgress(fileInfo.FileName, "",
-                                    (double) _globalProgress / totalSize * 100, ea));
-                            };
-                        retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, fileProgress,
+                        var fileInfo = filesArray[i];
+
+                        retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, subProgress,
                             _cts.Token);
 
                         if (!retVal)
@@ -220,8 +219,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                         double currentProgress = Interlocked.Add(ref _globalProgress, fileInfo.BinSize);
 
-                        progress?.Report(new ScanAndRepairProgress(fileInfo.FileName, "",
-                            currentProgress / totalSize * 100));
+                        progress?.Report(new ScanProgress(fileInfo.FileName,
+                            currentProgress / totalSize * 100, i, totalIndex));
                     }
 
                     return retVal;
@@ -293,7 +292,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         }
 
         public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
-            bool useChunkDownloader = false, IProgress<ScanAndRepairSubProgress> progress = null,
+            bool useChunkDownloader = false, IProgress<ScanSubProgress> progress = null,
 #pragma warning disable IDE0034 // Simplifier l'expression 'default'
             CancellationToken ct = default(CancellationToken))
 #pragma warning restore IDE0034 // Simplifier l'expression 'default'
@@ -302,8 +301,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             //#1 Check   File
             ct.ThrowIfCancellationRequested();
-            progress?.Report(new ScanAndRepairSubProgress(ScanAndRepairSubProgressStep.Checking, "",
-                (int) ScanAndRepairSubProgressStep.Checking));
+            progress?.Report(new ScanSubProgress(ScanSubProgressStep.Check, 0));
 
             Progress<double> subProgressCheck = null;
             if (progress != null)
@@ -311,30 +309,28 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 subProgressCheck = new Progress<double>();
                 subProgressCheck.ProgressChanged += (o, d) =>
                 {
-                    progress.Report(new ScanAndRepairSubProgress(
-                        ScanAndRepairSubProgressStep.Checking,
-                        "",
-                        (int) ScanAndRepairSubProgressStep.Checking + d / 100 * 10));
+                    progress.Report(new ScanSubProgress(
+                        ScanSubProgressStep.Check, d));
                 };
             }
 
             if (await RunFileCheck(filePath, fileInfo.Size, fileInfo.Crc32, ct, subProgressCheck))
             {
-                progress?.Report(new ScanAndRepairSubProgress(ScanAndRepairSubProgressStep.End, "", 100));
+                progress?.Report(new ScanSubProgress(ScanSubProgressStep.End, 100));
                 return true;
             }
 
             //#2 Download File
             ct.ThrowIfCancellationRequested();
-            progress?.Report(new ScanAndRepairSubProgress(ScanAndRepairSubProgressStep.Downloading, "", 10));
+            progress?.Report(new ScanSubProgress(ScanSubProgressStep.Download, 0));
 
             var tempFileName = Path.Combine(GameScannerTempPath, $"{fileInfo.FileName.GetHashCode():X4}.tmp");
             if (File.Exists(tempFileName))
                 File.Delete(tempFileName);
 
-            var fileDownloader = useChunkDownloader
-                ? (IFileDownloader) new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath)
-                : new SimpleFileDownloader(fileInfo.HttpLink, tempFileName);
+            var fileDownloader = useChunkDownloader && fileInfo.BinSize > ChunkFileDownloader.ChunkSizeLimit
+                ? new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath)
+                : (IFileDownloader) new SimpleFileDownloader(fileInfo.HttpLink, tempFileName);
 
             if (progress != null)
                 fileDownloader.ProgressChanged += (sender, eventArg) =>
@@ -343,24 +339,20 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     {
                         case FileDownloaderState.Invalid:
                         case FileDownloaderState.Download:
-                            progress.Report(new ScanAndRepairSubProgress(
-                                ScanAndRepairSubProgressStep.Downloading,
-                                $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} ({fileDownloader.DwnlSpeed.FormatToBytesSizeAlt()}ps)",
-                                (int) ScanAndRepairSubProgressStep.Downloading + fileDownloader.DwnlProgress / 100 *
-                                (ScanAndRepairSubProgressStep.CheckingDownload -
-                                 ScanAndRepairSubProgressStep.Downloading)));
+                            progress.Report(new ScanSubProgress(
+                                ScanSubProgressStep.Download, fileDownloader.DwnlProgress * 0.99,
+                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted,
+                                    fileDownloader.DwnlSpeed)));
                             break;
                         case FileDownloaderState.Finalize:
-                            progress.Report(new ScanAndRepairSubProgress(
-                                ScanAndRepairSubProgressStep.Downloading,
-                                $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} (finalize)",
-                                (int) ScanAndRepairSubProgressStep.CheckingDownload));
+                            progress.Report(new ScanSubProgress(
+                                ScanSubProgressStep.Download, 99,
+                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted, 0)));
                             break;
                         case FileDownloaderState.Complete:
-                            progress.Report(new ScanAndRepairSubProgress(
-                                ScanAndRepairSubProgressStep.Downloading,
-                                $"{BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSizeCompleted)} / {BytesSizeExtension.FormatToBytesSizeAlt(fileDownloader.DwnlSize)} (complete)",
-                                (int) ScanAndRepairSubProgressStep.CheckingDownload));
+                            progress.Report(new ScanSubProgress(
+                                ScanSubProgressStep.Download, 100,
+                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted, 0)));
                             break;
                         case FileDownloaderState.Error:
                         case FileDownloaderState.Abort:
@@ -383,18 +375,17 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             //#3 Check Downloaded File
             ct.ThrowIfCancellationRequested();
-            progress?.Report(new ScanAndRepairSubProgress(ScanAndRepairSubProgressStep.CheckingDownload, "", 55));
 
             Progress<double> subProgressCheckDown = null;
             if (progress != null)
             {
+                progress.Report(new ScanSubProgress(ScanSubProgressStep.CheckDownload, 0));
+
                 subProgressCheckDown = new Progress<double>();
                 subProgressCheckDown.ProgressChanged += (o, d) =>
                 {
-                    progress.Report(new ScanAndRepairSubProgress(
-                        ScanAndRepairSubProgressStep.CheckingDownload,
-                        "",
-                        (int) ScanAndRepairSubProgressStep.CheckingDownload + d / 100 * 10));
+                    progress.Report(new ScanSubProgress(
+                        ScanSubProgressStep.CheckDownload, d));
                 };
             }
 
@@ -412,20 +403,19 @@ namespace ProjectCeleste.GameFiles.GameScanner
             {
                 var tempFileName2 = $"{tempFileName.Replace(".tmp", string.Empty)}.ext.tmp";
                 //
-                progress?.Report(new ScanAndRepairSubProgress(
-                    ScanAndRepairSubProgressStep.ExtractingDownload,
-                    "",
-                    (int) ScanAndRepairSubProgressStep.ExtractingDownload));
-
-                var extractProgress = new Progress<double>();
+                Progress<double> extractProgress = null;
                 if (progress != null)
+                {
+                    progress.Report(new ScanSubProgress(
+                        ScanSubProgressStep.ExtractDownload, 0));
+
+                    extractProgress = new Progress<double>();
                     extractProgress.ProgressChanged += (o, d) =>
                     {
-                        progress.Report(new ScanAndRepairSubProgress(
-                            ScanAndRepairSubProgressStep.ExtractingDownload,
-                            "",
-                            (int) ScanAndRepairSubProgressStep.ExtractingDownload + d / 100 * 10));
+                        progress.Report(new ScanSubProgress(
+                            ScanSubProgressStep.ExtractDownload, d));
                     };
+                }
                 await L33TZipUtils.DoExtractL33TZipFile(tempFileName, tempFileName2, ct, extractProgress);
 
                 //#4.1 Check Extracted File
@@ -433,13 +423,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 Progress<double> subProgressCheckExt = null;
                 if (progress != null)
                 {
+                    //
+                    progress.Report(new ScanSubProgress(
+                        ScanSubProgressStep.CheckExtractDownload, 0));
+
                     subProgressCheckExt = new Progress<double>();
                     subProgressCheckExt.ProgressChanged += (o, d) =>
                     {
-                        progress.Report(new ScanAndRepairSubProgress(
-                            ScanAndRepairSubProgressStep.CheckingExtractedDownload,
-                            "",
-                            (int) ScanAndRepairSubProgressStep.CheckingExtractedDownload + d / 100 * 10));
+                        progress.Report(new ScanSubProgress(
+                            ScanSubProgressStep.CheckExtractDownload, d));
                     };
                 }
 
@@ -451,24 +443,26 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             //#5 Move new file to game folder
             ct.ThrowIfCancellationRequested();
-            progress?.Report(new ScanAndRepairSubProgress(
-                ScanAndRepairSubProgressStep.Finalizing,
-                "",
-                (int) ScanAndRepairSubProgressStep.Finalizing));
-            if (File.Exists(filePath))
-                File.Delete(filePath);
 
-            var pathName = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(pathName) && !Directory.Exists(pathName))
-                Directory.CreateDirectory(pathName);
+            progress?.Report(new ScanSubProgress(
+                ScanSubProgressStep.Finalize, 0));
+
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+            else
+            {
+                var pathName = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(pathName) && !Directory.Exists(pathName))
+                    Directory.CreateDirectory(pathName);
+            }
 
             File.Move(tempFileName, filePath);
 
             //#6 End
-            progress?.Report(new ScanAndRepairSubProgress(
-                ScanAndRepairSubProgressStep.End,
-                "",
-                (int) ScanAndRepairSubProgressStep.End));
+            progress?.Report(new ScanSubProgress(
+                ScanSubProgressStep.End, 100));
 
             return true;
         }

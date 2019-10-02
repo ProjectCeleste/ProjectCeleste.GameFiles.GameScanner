@@ -65,17 +65,21 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     webClient.CancelAsync();
                 }, true);
 
-                try
+                _stopwatch.Reset();
+                _stopwatch.Start();
+                var timerSync = new object();
+                using (new Timer(ReportProgress, timerSync, 500, 500))
                 {
-                    _stopwatch.Reset();
-                    _stopwatch.Start();
-                    await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
-                }
-                finally
-                {
-                    _stopwatch.Stop();
-                    webClient.CancelAsync();
-                    cancel.Dispose();
+                    try
+                    {
+                        await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
+                    }
+                    finally
+                    {
+                        _stopwatch.Stop();
+                        webClient.CancelAsync();
+                        cancel.Dispose();
+                    }
                 }
 
                 // ReSharper disable once SwitchStatementMissingSomeCases
@@ -101,8 +105,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             DwnlSizeCompleted = e.BytesReceived;
             DwnlProgress = e.ProgressPercentage;
             DwnlSpeed = (double) e.BytesReceived / _stopwatch.Elapsed.Seconds;
-
-            OnProgressChanged();
         }
 
         private void DownloadCompleted(object sender, AsyncCompletedEventArgs e)
@@ -124,14 +126,26 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 DwnlProgress = 100;
                 State = FileDownloaderState.Complete;
             }
-
-            //
-            OnProgressChanged();
         }
 
         protected virtual void OnProgressChanged()
         {
             ProgressChanged?.Invoke(this, null);
+        }
+
+        private void ReportProgress(object state)
+        {
+            if (!Monitor.TryEnter(state))
+                return;
+
+            try
+            {
+                OnProgressChanged();
+            }
+            finally
+            {
+                Monitor.Exit(state);
+            }
         }
     }
 }

@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace ProjectCeleste.GameFiles.GameScanner.Utils
 {
-    public static class SemaphoreSlimExtension
+    internal static class SemaphoreSlimExtension
     {
-        public static async Task<IDisposable> UseWaitAsync(
+        internal static async Task<IDisposable> UseWaitAsync(
             this SemaphoreSlim semaphore,
 #pragma warning disable IDE0034 // Simplifier l'expression 'default'
             CancellationToken cancelToken = default(CancellationToken))
