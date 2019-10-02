@@ -23,7 +23,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
     {
         private static readonly string GameScannerTempPath =
             Path.Combine(Path.GetTempPath(), "ProjectCeleste.GameFiles.GameScannner", "Temp");
-        
+
         private readonly string _filesRootPath;
 
         private readonly bool _isSteam;
@@ -121,6 +121,9 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     var currentSize = 0L;
                     var index = 0;
                     var totalIndex = _filesInfo.Count();
+
+                    progress?.Report(new ScanProgress(string.Empty, 0, 0, totalIndex));
+
                     Parallel.ForEach(_filesInfo, async (fileInfo, state) =>
                     {
                         try
@@ -133,36 +136,23 @@ namespace ProjectCeleste.GameFiles.GameScanner
                             throw;
                         }
 
-                        if (quick)
+                        if (quick && !RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size))
                         {
-                            if (!RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size))
-                            {
-                                retVal = false;
-                                state.Break();
-                            }
-
-                            var currentIndex = Interlocked.Increment(ref index);
-                            double newSize = Interlocked.Add(ref currentSize, fileInfo.Size);
-
-                            progress?.Report(
-                                new ScanProgress(fileInfo.FileName, newSize / totalSize * 100, currentIndex,
-                                    totalIndex));
+                            retVal = false;
+                            state.Break();
                         }
-                        else
+                        else if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size,
+                            fileInfo.Crc32, token))
                         {
-                            if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size,
-                                fileInfo.Crc32, token))
-                            {
-                                retVal = false;
-                                state.Break();
-                            }
-
-                            var currentIndex = Interlocked.Increment(ref index);
-                            double newSize = Interlocked.Add(ref currentSize, fileInfo.Size);
-
-                            progress?.Report(new ScanProgress(fileInfo.FileName, newSize / totalSize * 100,
-                                currentIndex, totalIndex));
+                            retVal = false;
+                            state.Break();
                         }
+
+                        var currentIndex = Interlocked.Increment(ref index);
+                        double newSize = Interlocked.Add(ref currentSize, fileInfo.Size);
+
+                        progress?.Report(new ScanProgress(fileInfo.FileName, newSize / totalSize * 100,
+                            currentIndex, totalIndex));
                     });
                 }, token);
             }
@@ -174,7 +164,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return retVal;
         }
 
-        public async Task<bool> ScanAndRepair(IProgress<ScanProgress> progress = null, IProgress<ScanSubProgress> subProgress = null)
+        public async Task<bool> ScanAndRepair(IProgress<ScanProgress> progress = null,
+            IProgress<ScanSubProgress> subProgress = null)
         {
             if (_filesInfo == null || !_filesInfo.Any())
                 throw new Exception("Not Initialized");
@@ -347,12 +338,14 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         case FileDownloaderState.Finalize:
                             progress.Report(new ScanSubProgress(
                                 ScanSubProgressStep.Download, 99,
-                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted, 0)));
+                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted,
+                                    0)));
                             break;
                         case FileDownloaderState.Complete:
                             progress.Report(new ScanSubProgress(
                                 ScanSubProgressStep.Download, 100,
-                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted, 0)));
+                                new ScanDownloadProgress(fileDownloader.DwnlSize, fileDownloader.DwnlSizeCompleted,
+                                    0)));
                             break;
                         case FileDownloaderState.Error:
                         case FileDownloaderState.Abort:
