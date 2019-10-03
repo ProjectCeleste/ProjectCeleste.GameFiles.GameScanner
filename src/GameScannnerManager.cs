@@ -36,8 +36,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private IEnumerable<GameFileInfo> _filesInfo;
 
-        private long _globalProgress;
-
         public GameScannnerManager(bool useChunkDownloader = false, bool isSteam = false) : this(GetGameFilesRootPath(),
             useChunkDownloader, isSteam)
         {
@@ -191,8 +189,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                     //
                     var totalSize = _filesInfo.Select(key => key.BinSize).Sum();
-                    const long currentSize = 0L;
-                    _globalProgress = currentSize;
+                    var globalProgress = 0L;
                     var totalIndex = _filesInfo.Count();
                     var filesArray = _filesInfo.OrderByDescending(key => key.FileName.Contains("\\"))
                         .ThenBy(key => key.FileName).ToArray();
@@ -202,16 +199,16 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                         var fileInfo = filesArray[i];
 
+                        progress?.Report(new ScanProgress(fileInfo.FileName,
+                            globalProgress / totalSize * 100, i, totalIndex));
+
                         retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, subProgress,
                             _cts.Token);
 
                         if (!retVal)
                             break;
 
-                        double currentProgress = Interlocked.Add(ref _globalProgress, fileInfo.BinSize);
-
-                        progress?.Report(new ScanProgress(fileInfo.FileName,
-                            currentProgress / totalSize * 100, i, totalIndex));
+                        globalProgress += fileInfo.BinSize;
                     }
 
                     return retVal;
