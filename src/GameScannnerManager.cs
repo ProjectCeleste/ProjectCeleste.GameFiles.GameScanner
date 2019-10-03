@@ -64,7 +64,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CleanUpTmpFolder();
         }
 
-        public async Task InitializeFromCelesteManifest(bool isSteam = false)
+        public async Task InitializeFromCelesteManifest()
         {
             if (_filesInfo?.Any() == true)
                 throw new Exception("Already Initialized");
@@ -80,7 +80,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             _filesInfo = fileInfos;
         }
 
-        public async Task InitializeFromGameManifest(string type, int build, bool isSteam = false)
+        public async Task InitializeFromGameManifest(string type, int build)
         {
             if (_filesInfo?.Any() == true)
                 throw new Exception("Already Initialized");
@@ -174,9 +174,14 @@ namespace ProjectCeleste.GameFiles.GameScanner
             try
             {
                 //
-                _cts?.Cancel();
-                _cts?.Dispose();
+                if (_cts != null)
+                {
+                    _cts.Cancel();
+                    _cts.Dispose();
+                }
+
                 _cts = new CancellationTokenSource();
+
                 var token = _cts.Token;
 
                 return await Task.Run(async () =>
@@ -200,10 +205,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         var fileInfo = filesArray[i];
 
                         progress?.Report(new ScanProgress(fileInfo.FileName,
-                            globalProgress / totalSize * 100, i, totalIndex));
+                            (double) globalProgress / totalSize * 100, i, totalIndex));
 
                         retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, subProgress,
-                            _cts.Token);
+                            token);
 
                         if (!retVal)
                             break;
