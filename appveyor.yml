@@ -204,7 +204,7 @@ deploy:
     description: '[View CHANGELOG.md](https://github.com/ProjectCeleste/ProjectCeleste.GameFiles.GameScanner/blob/master/CHANGELOG.md)'
     release: ProjectCeleste.GameFiles.GameScanner v$(Build_Version)
     auth_token: $(access_token)
-    artifact: ProjectCeleste.GameFiles.GameScanner, NuGet
+    artifact: ProjectCeleste.GameFiles.GameScanner
     draft: false
     prerelease: false
     force_update: true
