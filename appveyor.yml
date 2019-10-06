@@ -184,8 +184,8 @@ test: off
 #---------------------------------#
 
 artifacts:
-  - path: 'src\bin\Release\net47'
-    name: ProjectCeleste.GameFiles.GameScanner.Net47
+  - path: 'src\bin\Release'
+    name: ProjectCeleste.GameFiles.GameScanner
     type: zip
   - path: 'src\bin\Release\ProjectCeleste.GameFiles.GameScanner.%Build_Version%.*nupkg'
     name: NuGet
@@ -204,7 +204,7 @@ deploy:
     description: '[View CHANGELOG.md](https://github.com/ProjectCeleste/ProjectCeleste.GameFiles.GameScanner/blob/master/CHANGELOG.md)'
     release: ProjectCeleste.GameFiles.GameScanner v$(Build_Version)
     auth_token: $(access_token)
-    artifact: ProjectCeleste.GameFiles.GameScanner.Net47, NuGet
+    artifact: ProjectCeleste.GameFiles.GameScanner, NuGet
     draft: false
     prerelease: false
     force_update: true
