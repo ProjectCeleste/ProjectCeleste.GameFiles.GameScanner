@@ -113,16 +113,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 var token = _cts.Token;
 
                 //
-                await Task.Run(() =>
+
+                var totalSize = _filesInfo.Select(key => key.Size).Sum();
+                var currentSize = 0L;
+                var index = 0;
+                var totalIndex = _filesInfo.Count();
+                progress?.Report(new ScanProgress(string.Empty, 0, 0, totalIndex));
+                if (quick)
                 {
-                    var totalSize = _filesInfo.Select(key => key.Size).Sum();
-                    var currentSize = 0L;
-                    var index = 0;
-                    var totalIndex = _filesInfo.Count();
-
-                    progress?.Report(new ScanProgress(string.Empty, 0, 0, totalIndex));
-
-                    Parallel.ForEach(_filesInfo, async (fileInfo, state) =>
+                    Parallel.ForEach(_filesInfo, (fileInfo, state) =>
                     {
                         try
                         {
@@ -134,13 +133,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                             throw;
                         }
 
-                        if (quick && !RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size))
-                        {
-                            retVal = false;
-                            state.Break();
-                        }
-                        else if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size,
-                            fileInfo.Crc32, token))
+                        if (!RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size))
                         {
                             retVal = false;
                             state.Break();
@@ -152,7 +145,25 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         progress?.Report(new ScanProgress(fileInfo.FileName, newSize / totalSize * 100,
                             currentIndex, totalIndex));
                     });
-                }, token);
+                }
+                else
+                {
+                    var fileInfos = _filesInfo.ToArray();
+                    for (var i = 0; i < fileInfos.Length; i++)
+                    {
+                        var fileInfo = fileInfos[i];
+                        token.ThrowIfCancellationRequested();
+
+                        if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size,
+                            fileInfo.Crc32, token))
+                            return false;
+
+                        currentSize += fileInfo.Size;
+
+                        progress?.Report(new ScanProgress(fileInfo.FileName, currentSize / totalSize * 100,
+                            i + 1, totalIndex));
+                    }
+                }
             }
             finally
             {
