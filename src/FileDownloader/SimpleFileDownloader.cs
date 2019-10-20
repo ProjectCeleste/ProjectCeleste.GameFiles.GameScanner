@@ -18,24 +18,24 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public SimpleFileDownloader(string httpLink, string outputFileName)
         {
-            DwnlSource = httpLink;
-            DwnlTarget = outputFileName;
+            DownloadUrl = httpLink;
+            FilePath = outputFileName;
             _stopwatch = new Stopwatch();
         }
 
         public FileDownloaderState State { get; private set; } = FileDownloaderState.Invalid;
 
-        public double DwnlProgress { get; private set; }
+        public double DownloadProgress { get; private set; }
 
-        public long DwnlSize { get; private set; }
+        public long DownloadSize { get; private set; }
 
-        public long DwnlSizeCompleted { get; private set; }
+        public long BytesDownloaded { get; private set; }
 
-        public string DwnlSource { get; }
+        public string DownloadUrl { get; }
 
-        public double DwnlSpeed { get; private set; }
+        public double DownloadSpeed { get; private set; }
 
-        public string DwnlTarget { get; }
+        public string FilePath { get; }
 
         public Exception Error { get; private set; }
 
@@ -47,7 +47,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             //
             State = FileDownloaderState.Download;
 
-            var path = Path.GetDirectoryName(DwnlTarget);
+            var path = Path.GetDirectoryName(FilePath);
             if (path != null && !Directory.Exists(path))
                 Directory.CreateDirectory(path);
 
@@ -72,8 +72,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 {
                     try
                     {
-                        await webClient.DownloadFileTaskAsync(DwnlSource, DwnlTarget);
-                        if (DwnlSizeCompleted == DwnlSize)
+                        await webClient.DownloadFileTaskAsync(DownloadUrl, FilePath);
+                        if (BytesDownloaded == DownloadSize)
                             State = FileDownloaderState.Complete;
                     }
                     finally
@@ -102,10 +102,10 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         private void DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
-            DwnlSize = e.TotalBytesToReceive;
-            DwnlSizeCompleted = e.BytesReceived;
-            DwnlProgress = e.ProgressPercentage;
-            DwnlSpeed = (double) e.BytesReceived / _stopwatch.Elapsed.Seconds;
+            DownloadSize = e.TotalBytesToReceive;
+            BytesDownloaded = e.BytesReceived;
+            DownloadProgress = e.ProgressPercentage;
+            DownloadSpeed = (double) e.BytesReceived / _stopwatch.Elapsed.Seconds;
         }
 
         private void DownloadCompleted(object sender, AsyncCompletedEventArgs e)
@@ -124,8 +124,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             else
             {
                 Error = null;
-                DwnlProgress = 100;
-                DwnlSizeCompleted = DwnlSize;
+                DownloadProgress = 100;
+                BytesDownloaded = DownloadSize;
                 State = FileDownloaderState.Complete;
             }
         }

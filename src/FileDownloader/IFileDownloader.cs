@@ -10,12 +10,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
     public interface IFileDownloader
     {
-        double DwnlProgress { get; }
-        long DwnlSize { get; }
-        long DwnlSizeCompleted { get; }
-        string DwnlSource { get; }
-        double DwnlSpeed { get; }
-        string DwnlTarget { get; }
+        double DownloadProgress { get; }
+        long DownloadSize { get; }
+        long BytesDownloaded { get; }
+        string DownloadUrl { get; }
+        double DownloadSpeed { get; }
+        string FilePath { get; }
         Exception Error { get; }
         FileDownloaderState State { get; }
 
