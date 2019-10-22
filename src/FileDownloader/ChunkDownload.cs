@@ -10,52 +10,71 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
     {
         private const int ChunkBufferSize = 32 * 1024; // 32Kb
 
-        private readonly HttpWebRequest _downloadRequest;
-        private readonly string _downloadTmpFileName;
+        internal string DownloadTmpFileName { get; private set; }
+
+        private readonly string _fileToDownload;
+        private readonly FileRange _fileRange;
+
+        private int _bytesDownloaded;
 
         internal ChunkDownload(string fileToDownload, FileRange fileRange, string tmpFolder)
         {
+            _fileRange = fileRange;
+            _fileToDownload = fileToDownload;
 
-            _downloadRequest = WebRequest.CreateHttp(fileToDownload);
-            _downloadRequest.AllowAutoRedirect = true;
-            _downloadRequest.AddRange(fileRange.Start, fileRange.End);
-            _downloadRequest.ServicePoint.ConnectionLimit = 100;
-            _downloadRequest.ServicePoint.Expect100Continue = false;
-
-            _downloadTmpFileName =
+            DownloadTmpFileName =
                     Path.Combine(tmpFolder,
                         $"0x{fileToDownload.ToLower().GetHashCode():X4}.0x{fileRange.Start:X8}.tmp");
         }
 
-        internal async Task<string> DownloadChunkAsync(CancellationToken ct, Action<int> progressCallback)
+        private HttpWebRequest CreateHttpWebRequest()
         {
+            var downloadRequest = WebRequest.CreateHttp(_fileToDownload);
+            downloadRequest.AllowAutoRedirect = true;
+            downloadRequest.ServicePoint.ConnectionLimit = 100;
+            downloadRequest.ServicePoint.Expect100Continue = false;
+
+            downloadRequest.AddRange(_fileRange.Start, _fileRange.End);
+
+            return downloadRequest;
+        }
+
+        internal async Task<bool> TryDownloadAsync(Action<int> progressCallback)
+        {
+            var downloadRequest = CreateHttpWebRequest();
+
             try
             {
-                using (var downloadResponse = (HttpWebResponse)_downloadRequest.GetResponse())
+                using (var downloadResponse = (HttpWebResponse)downloadRequest.GetResponse())
                 using (var downloadSource = downloadResponse.GetResponseStream())
-                using (var downloadTarget = new FileStream(_downloadTmpFileName, FileMode.Create, FileAccess.Write))
+                using (var downloadTarget = new FileStream(DownloadTmpFileName, FileMode.Create, FileAccess.Write))
                 {
                     int bytesRead;
                     var buffer = new byte[ChunkBufferSize];
 
                     do
                     {
-                        ct.ThrowIfCancellationRequested();
-
-                        bytesRead = await downloadSource.ReadAsync(buffer, 0, ChunkBufferSize, ct);
+                        bytesRead = await downloadSource.ReadAsync(buffer, 0, ChunkBufferSize);
                         downloadTarget.Write(buffer, 0, bytesRead);
 
                         progressCallback(bytesRead);
+                        _bytesDownloaded += bytesRead;
                     }
                     while (bytesRead > 0);
                 }
             }
+            catch
+            {
+                File.Delete(DownloadTmpFileName);
+                progressCallback(-_bytesDownloaded);
+                return false;
+            }
             finally
             {
-                _downloadRequest.Abort();
+                downloadRequest.Abort();
             }
 
-            return _downloadTmpFileName;
+            return true;
         }
     }
 }

@@ -1,6 +1,5 @@
 ﻿#region Using directives
 
-using ProjectCeleste.GameFiles.GameScanner.FileDownloader.Util;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -23,7 +22,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
         private readonly Stopwatch _downloadSpeedStopwatch;
         private readonly string _downloadTempFolder;
 
+        private ConcurrentDictionary<long, string> _completedChunks = new ConcurrentDictionary<long, string>();
+        private ConcurrentQueue<FileRange> _chunkDownloadQueue;
+
         private long _downloadSizeCompleted;
+        private int _activeDownloads = 1;
+        private bool _downloadFailed = false;
 
         public ChunkFileDownloader(string httpLink, string outputFileName, string tmpFolder)
         {
@@ -60,7 +64,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public Exception Error { get; private set; }
 
-        public async Task Download(CancellationToken ct = default)
+        public async Task DownloadAsync(CancellationToken ct = default)
         {
             if (State == FileDownloaderState.Download)
                 return;
@@ -89,7 +93,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 var timerSync = new object();
                 using (new Timer(ReportProgress, timerSync, 100, 100))
                 {
-                    var completedChunks = await DownloadChunksInParallel(readRanges, ct);
+                    await OrchestrateDownloadWorkersAsync(readRanges, ct);
                     _downloadSpeedStopwatch.Stop();
 
                     if (BytesDownloaded != DownloadSize)
@@ -98,7 +102,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     State = FileDownloaderState.Finalize;
                     ReportProgress(timerSync); //Forced
 
-                    WriteChunksToFile(completedChunks);
+                    WriteChunksToFile(_completedChunks);
 
                     State = FileDownloaderState.Complete;
                     ReportProgress(timerSync); //Forced
@@ -117,20 +121,43 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             }
         }
 
-        private async Task<ConcurrentDictionary<long, string>> DownloadChunksInParallel(IEnumerable<FileRange> chunks, CancellationToken ct)
+        private async Task OrchestrateDownloadWorkersAsync(IEnumerable<FileRange> chunks, CancellationToken ct)
         {
-            var completedChunks = new ConcurrentDictionary<long, string>();
+            var downloaderWorkers = new ConcurrentQueue<Task>();
+            _chunkDownloadQueue = new ConcurrentQueue<FileRange>(chunks);
 
-            await Parallelism.ForEachAsync(chunks, MaxConcurrentDownloads, async (readRange) =>
+            while (_activeDownloads < MaxConcurrentDownloads && _chunkDownloadQueue.Count > 0 && !_downloadFailed)
             {
-                var chunkDownload = new ChunkDownload(DownloadUrl, readRange, _downloadTempFolder);
+                _activeDownloads++;
 
-                var downloadedFileName = await chunkDownload.DownloadChunkAsync(ct, IncrementTotalDownloadProgress);
+                downloaderWorkers.Enqueue(Task.Run(DequeueAndDownloadChunksAsync, ct));
+                await Task.Delay(1000);
+            }
 
-                completedChunks.TryAdd(readRange.Start, downloadedFileName);
-            });
+            await Task.WhenAll(downloaderWorkers);
+        }
 
-            return completedChunks;
+        private async Task DequeueAndDownloadChunksAsync()
+        {
+            var workerFailedDownloading = false;
+            var taskId = _activeDownloads;
+
+            while (_chunkDownloadQueue.TryDequeue(out var fileChunk) && !workerFailedDownloading)
+            {
+                var chunkDownload = new ChunkDownload(DownloadUrl, fileChunk, _downloadTempFolder);
+                var downloadSuccesfullyCompleted = await chunkDownload.TryDownloadAsync(IncrementTotalDownloadProgress);
+
+                if (!downloadSuccesfullyCompleted)
+                {
+                    _chunkDownloadQueue.Enqueue(fileChunk);
+                    workerFailedDownloading = true;
+                    _downloadFailed = true;
+                }
+                else
+                {
+                    _completedChunks.TryAdd(fileChunk.Start, chunkDownload.DownloadTmpFileName);
+                }
+            }
         }
 
         private IEnumerable<FileRange> CalculateFileChunkRanges()
@@ -161,10 +188,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
         {
             using (var targetFile = new BufferedStream(new FileStream(FilePath, FileMode.Create, FileAccess.Write)))
             {
-                foreach (var tempFile in fileChunks.ToArray().OrderBy(b => b.Key)) // long, string
+                foreach (var tempFile in fileChunks.ToArray().OrderBy(b => b.Key))
                 {
                     using (var sourceChunks = new BufferedStream(File.OpenRead(tempFile.Value)))
                         sourceChunks.CopyTo(targetFile);
+
+                    File.Delete(tempFile.Value);
                 }
             }
         }

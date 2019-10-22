@@ -324,9 +324,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (File.Exists(tempFileName))
                 File.Delete(tempFileName);
 
-            var fileDownloader = useChunkDownloader && fileInfo.BinSize > ChunkFileDownloader.MaxChunkSize
-                ? new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath)
-                : (IFileDownloader) new SimpleFileDownloader(fileInfo.HttpLink, tempFileName);
+            var fileDownloader = new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath);
 
             if (progress != null)
                 fileDownloader.ProgressChanged += (sender, eventArg) =>
@@ -363,7 +361,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             try
             {
-                await fileDownloader.Download(ct);
+                await fileDownloader.DownloadAsync(ct);
             }
             catch (Exception e)
             {
@@ -435,6 +433,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                 if (!await RunFileCheck(tempFileName2, fileInfo.Size, fileInfo.Crc32, ct, subProgressCheckExt))
                     throw new Exception($"Extracted file '{fileInfo.FileName}' is invalid!");
+
+                File.Delete(tempFileName);
 
                 tempFileName = tempFileName2;
             }

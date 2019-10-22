@@ -39,7 +39,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public Exception Error { get; private set; }
 
-        public async Task Download(CancellationToken ct = default(CancellationToken))
+        public async Task DownloadAsync(CancellationToken ct = default(CancellationToken))
         {
             if (State == FileDownloaderState.Download)
                 return;
