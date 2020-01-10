@@ -28,7 +28,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private readonly bool _isSteam;
 
-        private readonly object _scanLock = new object();
+        private bool _scanIsRunning;
 
         private readonly bool _useChunkDownloader;
 
@@ -49,6 +49,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             _filesRootPath = filesRootPath;
             _useChunkDownloader = useChunkDownloader;
             _isSteam = isSteam;
+            _scanIsRunning = false;
         }
 
         public void Dispose()
@@ -101,8 +102,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (_gameFiles == null || !_gameFiles.Any())
                 throw new Exception("Not Initialized");
 
-            if (!Monitor.TryEnter(_scanLock))
+            if (_scanIsRunning)
                 throw new Exception("Scan already running!");
+
+            _scanIsRunning = true;
 
             var retVal = true;
             try
@@ -167,7 +170,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             }
             finally
             {
-                Monitor.Exit(_scanLock);
+                _scanIsRunning = false;
             }
 
             return retVal;
@@ -179,8 +182,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (_gameFiles == null || !_gameFiles.Any())
                 throw new Exception("Not Initialized");
 
-            if (!Monitor.TryEnter(_scanLock))
+            if (_scanIsRunning)
                 throw new Exception("Scan already running!");
+
+            _scanIsRunning = true;
 
             try
             {
@@ -230,13 +235,13 @@ namespace ProjectCeleste.GameFiles.GameScanner
             {
                 await Task.Factory.StartNew(CleanUpTmpFolder);
 
-                Monitor.Exit(_scanLock);
+                _scanIsRunning = false;
             }
         }
 
         public void Abort()
         {
-            if (!Monitor.IsEntered(_scanLock))
+            if (!_scanIsRunning)
                 return;
 
             if (_cts != null && !_cts.IsCancellationRequested)

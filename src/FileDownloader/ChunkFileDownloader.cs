@@ -90,8 +90,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 var readRanges = CalculateFileChunkRanges();
 
                 //Parallel download
-                var timerSync = new object();
-                using (new Timer(ReportProgress, timerSync, 100, 100))
+                using (new Timer(ReportProgress, null, 100, 100))
                 {
                     await OrchestrateDownloadWorkersAsync(readRanges, ct);
                     _downloadSpeedStopwatch.Stop();
@@ -100,12 +99,12 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                         throw new Exception($"Download was completed ({BytesDownloaded} bytes), but did not receive expected size of {DownloadSize} bytes");
 
                     State = FileDownloaderState.Finalize;
-                    ReportProgress(timerSync); //Forced
+                    ReportProgress(null); //Forced
 
                     WriteChunksToFile(_completedChunks);
 
                     State = FileDownloaderState.Complete;
-                    ReportProgress(timerSync); //Forced
+                    ReportProgress(null); //Forced
                 }
             }
             catch (Exception e)
@@ -212,17 +211,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         private void ReportProgress(object state)
         {
-            if (!Monitor.TryEnter(state))
-                return;
-
-            try
-            {
-                OnProgressChanged();
-            }
-            finally
-            {
-                Monitor.Exit(state);
-            }
+            OnProgressChanged();
         }
     }
 }
