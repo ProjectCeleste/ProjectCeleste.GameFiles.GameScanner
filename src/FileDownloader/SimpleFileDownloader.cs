@@ -67,8 +67,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
                 _stopwatch.Reset();
                 _stopwatch.Start();
-                var timerSync = new object();
-                using (new Timer(ReportProgress, timerSync, 500, 500))
+                using (new Timer(ReportProgress, null, 500, 500))
                 {
                     try
                     {
@@ -137,17 +136,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         private void ReportProgress(object state)
         {
-            if (!Monitor.TryEnter(state))
-                return;
-
-            try
-            {
-                OnProgressChanged();
-            }
-            finally
-            {
-                Monitor.Exit(state);
-            }
+            OnProgressChanged();
         }
     }
 }
