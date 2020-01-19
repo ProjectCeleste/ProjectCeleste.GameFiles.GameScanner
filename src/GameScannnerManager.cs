@@ -30,24 +30,20 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private bool _scanIsRunning;
 
-        private readonly bool _useChunkDownloader;
-
         private CancellationTokenSource _cts;
 
         private IEnumerable<GameFileInfo> _gameFiles;
 
-        public GameScannnerManager(bool useChunkDownloader = false, bool isSteam = false) : this(GetGameFilesRootPath(),
-            useChunkDownloader, isSteam)
+        public GameScannnerManager(bool isSteam = false) : this(GetGameFilesRootPath(), isSteam)
         {
         }
 
-        public GameScannnerManager(string filesRootPath, bool useChunkDownloader, bool isSteam = false)
+        public GameScannnerManager(string filesRootPath, bool isSteam = false)
         {
             if (string.IsNullOrEmpty(filesRootPath))
-                throw new ArgumentException("Game files path is null or empty!", nameof(filesRootPath));
+                throw new ArgumentException("Game files path is null or empty", nameof(filesRootPath));
 
             _filesRootPath = filesRootPath;
-            _useChunkDownloader = useChunkDownloader;
             _isSteam = isSteam;
             _scanIsRunning = false;
         }
@@ -72,38 +68,33 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             CleanUpTmpFolder();
 
-            //
             var gameFileInfos = await GameFilesInfoFromCelesteManifest(_isSteam);
-            var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
-            if (!fileInfos.Any())
-                throw new ArgumentException("Game files info is null or empty!", nameof(gameFileInfos));
+            var gamesFiles = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
+            if (!gamesFiles.Any())
+                throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
 
-            _gameFiles = fileInfos;
+            _gameFiles = gamesFiles;
         }
 
-        public async Task InitializeFromGameManifest(string type, int build)
+        public async Task InitializeFromGameManifest()
         {
             if (_gameFiles?.Any() == true)
                 throw new Exception("Already Initialized");
 
             CleanUpTmpFolder();
 
-            //
             var gameFileInfos = await GameFilesInfoFromCelesteManifest(_isSteam);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (!fileInfos.Any())
-                throw new ArgumentException("Game files info is null or empty!", nameof(gameFileInfos));
+                throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
 
             _gameFiles = fileInfos;
         }
 
         public async Task<bool> Scan(bool quick = true, IProgress<ScanProgress> progress = null)
         {
-            if (_gameFiles == null || !_gameFiles.Any())
-                throw new Exception("Not Initialized");
-
-            if (_scanIsRunning)
-                throw new Exception("Scan already running!");
+            EnsureInitialized();
+            EnsureGameScannerIsNotRunning();
 
             _scanIsRunning = true;
 
@@ -114,8 +105,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 _cts?.Dispose();
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
-
-                //
 
                 var totalSize = _gameFiles.Select(key => key.Size).Sum();
                 var currentSize = 0L;
@@ -179,17 +168,13 @@ namespace ProjectCeleste.GameFiles.GameScanner
         public async Task<bool> ScanAndRepair(IProgress<ScanProgress> progress = null,
             IProgress<ScanSubProgress> subProgress = null)
         {
-            if (_gameFiles == null || !_gameFiles.Any())
-                throw new Exception("Not Initialized");
-
-            if (_scanIsRunning)
-                throw new Exception("Scan already running!");
+            EnsureInitialized();
+            EnsureGameScannerIsNotRunning();
 
             _scanIsRunning = true;
 
             try
             {
-                //
                 if (_cts != null)
                 {
                     _cts.Cancel();
@@ -200,13 +185,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                 var token = _cts.Token;
 
-                //
                 CleanUpTmpFolder();
 
-                //
                 var retVal = false;
 
-                //
                 var totalSize = _gameFiles.Select(key => key.BinSize).Sum();
                 var globalProgress = 0L;
                 var totalIndex = _gameFiles.Count();
@@ -221,7 +203,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     progress?.Report(new ScanProgress(fileInfo.FileName,
                         (double) globalProgress / totalSize * 100, i, totalIndex));
 
-                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, _useChunkDownloader, subProgress, token);
+                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, subProgress, token);
 
                     if (!retVal)
                         break;
@@ -246,6 +228,18 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             if (_cts != null && !_cts.IsCancellationRequested)
                 _cts.Cancel();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_gameFiles == null || !_gameFiles.Any())
+                throw new Exception("Game scanner has not been initialized or no game files was found");
+        }
+
+        private void EnsureGameScannerIsNotRunning()
+        {
+            if (_scanIsRunning)
+                throw new Exception("Scan is already running");
         }
 
         private static void CleanUpTmpFolder()
@@ -280,23 +274,38 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         #region GameFile
 
-        public static async Task<bool> RunFileCheck(string filePath, long fileSize, uint fileCrc32,
-            CancellationToken ct = default,
-            IProgress<double> progress = null)
+        public static async Task EnsureValidGameFile(string gameFilePath, long expectedFileSize, uint expectedCrc32,
+            CancellationToken ct = default, IProgress<double> progress = null)
         {
-            return RunFileQuickCheck(filePath, fileSize) &&
-                   fileCrc32 == await Crc32Utils.DoGetCrc32FromFile(filePath, ct, progress);
+            var gameFileInfo = new FileInfo(gameFilePath);
+
+            if (!gameFileInfo.Exists)
+                throw new Exception($"The game file {gameFilePath} does not exist");
+
+            if (gameFileInfo.Length != expectedFileSize)
+                throw new Exception($"The game file {gameFilePath} was expected to have a size of {expectedFileSize} but was {gameFileInfo.Length}");
+
+            var gameFileCrc32 = await Crc32Utils.DoGetCrc32FromFile(gameFilePath, ct, progress);
+
+            if (gameFileCrc32 != expectedCrc32)
+                throw new Exception($"The game file {gameFilePath} was expected to have a crc32 {expectedCrc32} but was {gameFileCrc32}");
         }
 
-        public static bool RunFileQuickCheck(string filePath, long fileSize)
+        public static async Task<bool> RunFileCheck(string gameFilePath, long expectedFileSize, uint expectedCrc32,
+            CancellationToken ct = default, IProgress<double> progress = null)
         {
-            var fi = new FileInfo(filePath);
-            return fi.Exists && fi.Length == fileSize;
+            return RunFileQuickCheck(gameFilePath, expectedFileSize) &&
+                   expectedCrc32 == await Crc32Utils.DoGetCrc32FromFile(gameFilePath, ct, progress);
+        }
+
+        public static bool RunFileQuickCheck(string gameFilePath, long expectedFileSize)
+        {
+            var fi = new FileInfo(gameFilePath);
+            return fi.Exists && fi.Length == expectedFileSize;
         }
 
         public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
-            bool useChunkDownloader = false, IProgress<ScanSubProgress> progress = null,
-            CancellationToken ct = default)
+            IProgress<ScanSubProgress> progress = null, CancellationToken ct = default)
         {
             var filePath = Path.Combine(gameFilePath, fileInfo.FileName);
 
@@ -364,15 +373,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     }
                 };
 
-            try
-            {
-                await fileDownloader.DownloadAsync(ct);
-            }
-            catch (Exception e)
-            {
-                throw new Exception($"Downloaded file '{fileInfo.FileName}' failed!\r\n" +
-                                    $"{e.Message}");
-            }
+            await fileDownloader.DownloadAsync(ct);
+ 
 
             //#3 Check Downloaded File
             ct.ThrowIfCancellationRequested();
@@ -390,12 +392,16 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 };
             }
 
-            if (!await RunFileCheck(tempFileName, fileInfo.BinSize, fileInfo.BinCrc32, ct, subProgressCheckDown))
+            try
+            {
+                await EnsureValidGameFile(tempFileName, fileInfo.BinSize, fileInfo.BinCrc32, ct, subProgressCheckDown);
+            }
+            catch
             {
                 if (File.Exists(tempFileName))
                     File.Delete(tempFileName);
 
-                throw new Exception($"Downloaded file '{fileInfo.FileName}' is invalid!");
+                throw;
             }
 
             //#4 Extract downloaded file
@@ -424,7 +430,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 Progress<double> subProgressCheckExt = null;
                 if (progress != null)
                 {
-                    //
                     progress.Report(new ScanSubProgress(
                         ScanSubProgressStep.CheckExtractDownload, 0));
 
@@ -436,8 +441,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     };
                 }
 
-                if (!await RunFileCheck(tempFileName2, fileInfo.Size, fileInfo.Crc32, ct, subProgressCheckExt))
-                    throw new Exception($"Extracted file '{fileInfo.FileName}' is invalid!");
+                await EnsureValidGameFile(tempFileName2, fileInfo.Size, fileInfo.Crc32, ct, subProgressCheckExt);
 
                 File.Delete(tempFileName);
 
@@ -582,14 +586,14 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 .ToDictionary(key => key.FileName, StringComparer.OrdinalIgnoreCase);
 
             //Load Celeste override
-            string json;
+            string manifestJsonContents;
             using (var client = new WebClient())
             {
-                json = await client.DownloadStringTaskAsync(
+                manifestJsonContents = await client.DownloadStringTaskAsync(
                     "https://downloads.projectceleste.com/game_files/manifest_override.json");
             }
 
-            var filesInfoOverride = JsonConvert.DeserializeObject<GameFilesInfo>(json).GameFileInfo.ToArray()
+            var filesInfoOverride = JsonConvert.DeserializeObject<GameFilesInfo>(manifestJsonContents).GameFileInfo.ToArray()
                 .Select(key => key.Value);
 
             foreach (var fileInfo in filesInfoOverride)
@@ -614,22 +618,20 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 baseHttpLink += "/";
             baseHttpLink = Path.Combine(baseHttpLink, "bin_override", buildId.ToString()).Replace("\\", "/");
 
-            var data = await GenerateGameFilesInfo(inputFolder, finalOutputFolder, baseHttpLink, buildId, ct);
+            var gameFiles = await GenerateGameFilesInfo(inputFolder, finalOutputFolder, baseHttpLink, buildId, ct);
 
-            if (data.GameFileInfo.Count < 1)
-                throw new Exception("FileInfo.Count < 1");
+            if (gameFiles.GameFileInfo.Count < 1)
+                throw new Exception($"No game files found in {inputFolder}");
 
-            //Json
-            var json = JsonConvert.SerializeObject(data, Formatting.Indented);
-            File.WriteAllText(Path.Combine(finalOutputFolder, $"manifest_override-{buildId}.json"), json,
+            var manifestJsonContents = JsonConvert.SerializeObject(gameFiles, Formatting.Indented);
+            File.WriteAllText(Path.Combine(finalOutputFolder, $"manifest_override-{buildId}.json"), manifestJsonContents,
                 Encoding.UTF8);
-            File.WriteAllText(Path.Combine(outputFolder, "manifest_override.json"), json, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(outputFolder, "manifest_override.json"), manifestJsonContents, Encoding.UTF8);
 
-            //Xml
-            var xml = data.SerializeToXml();
-            File.WriteAllText(Path.Combine(finalOutputFolder, $"manifest_override-{buildId}.xml"), xml,
+            var manifestXmlContents = gameFiles.SerializeToXml();
+            File.WriteAllText(Path.Combine(finalOutputFolder, $"manifest_override-{buildId}.xml"), manifestXmlContents,
                 Encoding.UTF8);
-            File.WriteAllText(Path.Combine(outputFolder, "manifest_override.xml"), xml, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(outputFolder, "manifest_override.xml"), manifestXmlContents, Encoding.UTF8);
         }
 
         private static async Task<GameFilesInfo> GenerateGameFilesInfo(string inputFolder, string outputFolder,
@@ -643,10 +645,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             var newFilesInfo = new List<GameFileInfo>();
             foreach (var file in Directory.GetFiles(inputFolder, "*", SearchOption.AllDirectories))
             {
-                //
                 ct.ThrowIfCancellationRequested();
 
-                //
                 var rootPath = inputFolder;
                 if (!rootPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
                     rootPath += Path.DirectorySeparatorChar;
@@ -679,10 +679,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             var outFileCrc = await Crc32Utils.DoGetCrc32FromFile(outFileName, ct);
             var outFileLength = new FileInfo(outFileName).Length;
 
-            var fileInfo = new GameFileInfo(fileName, fileCrc, fileLength, externalLocation,
+            return new GameFileInfo(fileName, fileCrc, fileLength, externalLocation,
                 outFileCrc, outFileLength);
-
-            return fileInfo;
         }
 
         #endregion
