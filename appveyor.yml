@@ -230,7 +230,9 @@ artifacts:
     name: ProjectCeleste.GameFiles.GameScanner
     type: zip
   - path: 'src\bin\Release\ProjectCeleste.GameFiles.GameScanner.*.*nupkg'
-    name: NuGet
+    name: NuGet_Package
+  - path: 'src\bin\Release\ProjectCeleste.GameFiles.GameScanner.*.nupkg'
+    name: GitHub_Package
     
 #---------------------------------#
 #     deployment configuration    #
@@ -253,17 +255,26 @@ deploy:
     on:
       Celeste_IsDeploy: true
 
-  # Deploy NuGet
+  # Deploy to NuGet
   - provider: NuGet
     server:                  # remove to push to NuGet.org
     api_key:
       secure: JurVq4I9wOP95B7ZAerkZlt/+f5MOQahoOCk9ScEA4bF6PIWe6iwEIMjhyUnnWgX
     skip_symbols: false
     symbol_server:           # remove to push symbols to SymbolSource.org
-    artifact: NuGet
+    artifact: NuGet_Package
     on:
       Celeste_IsDeploy: true
-    
+
+  # Deploy to GitHub Packages
+  - provider: NuGet
+    server: https://nuget.pkg.github.com/ProjectCeleste/index.json
+    api_key: '$(access_token)'
+    username: '$(github_user)'
+    artifact: GitHub_Package
+    on:
+      Celeste_IsDeploy: true
+ 
 # scripts to run before deployment
 before_deploy:
 
