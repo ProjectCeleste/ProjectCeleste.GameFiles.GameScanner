@@ -76,14 +76,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
             _gameFiles = gamesFiles;
         }
 
-        public async Task InitializeFromGameManifest()
+        public async Task InitializeFromGameManifest(string type = "production",
+            int build = 6148)
         {
             if (_gameFiles?.Any() == true)
                 throw new Exception("Already Initialized");
 
             CleanUpTmpFolder();
 
-            var gameFileInfos = await GameFilesInfoFromCelesteManifest(_isSteam);
+            var gameFileInfos = await GameFilesInfoFromGameManifest(type, build, _isSteam);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (!fileInfos.Any())
                 throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
