@@ -19,10 +19,10 @@ using ProjectCeleste.GameFiles.Tools.Xml;
 
 namespace ProjectCeleste.GameFiles.GameScanner
 {
-    public class GameScannnerManager : IDisposable
+    public class GameScannerManager : IDisposable
     {
         private static readonly string GameScannerTempPath =
-            Path.Combine(Path.GetTempPath(), "ProjectCeleste.GameFiles.GameScannner", "Temp");
+            Path.Combine(Path.GetTempPath(), "ProjectCeleste.GameFiles.GameScanner", "Temp");
 
         private readonly string _filesRootPath;
 
@@ -34,11 +34,11 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private IEnumerable<GameFileInfo> _gameFiles;
 
-        public GameScannnerManager(bool isSteam = false) : this(GetGameFilesRootPath(), isSteam)
+        public GameScannerManager(bool isSteam = false) : this(GetGameFilesRootPath(), isSteam)
         {
         }
 
-        public GameScannnerManager(string filesRootPath, bool isSteam = false)
+        public GameScannerManager(string filesRootPath, bool isSteam = false)
         {
             if (string.IsNullOrEmpty(filesRootPath))
                 throw new ArgumentException("Game files path is null or empty", nameof(filesRootPath));
