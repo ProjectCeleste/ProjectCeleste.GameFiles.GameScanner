@@ -1,10 +1,6 @@
-﻿#region Using directives
-
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-
-#endregion
 
 namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {

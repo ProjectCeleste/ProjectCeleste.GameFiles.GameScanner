@@ -1,14 +1,10 @@
-﻿#region Using directives
-
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-
-#endregion
 
 namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
@@ -61,7 +57,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 var cancel = ct.Register(() =>
                 {
                     _stopwatch.Stop();
-                    // ReSharper disable once AccessToDisposedClosure
                     webClient.CancelAsync();
                 }, true);
 
@@ -82,7 +77,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                         cancel.Dispose();
                     }
                 }
-                // ReSharper disable once SwitchStatementMissingSomeCases
+
                 switch (State)
                 {
                     case FileDownloaderState.Error:

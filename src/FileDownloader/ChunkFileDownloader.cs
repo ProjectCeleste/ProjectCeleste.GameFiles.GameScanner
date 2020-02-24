@@ -1,6 +1,4 @@
-﻿#region Using directives
-
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,8 +7,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-
-#endregion
 
 namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
@@ -22,7 +18,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
         private readonly Stopwatch _downloadSpeedStopwatch;
         private readonly string _downloadTempFolder;
 
-        private ConcurrentDictionary<long, string> _completedChunks = new ConcurrentDictionary<long, string>();
+        private readonly ConcurrentDictionary<long, string> _completedChunks = new ConcurrentDictionary<long, string>();
         private ConcurrentQueue<FileRange> _chunkDownloadQueue;
 
         private long _downloadSizeCompleted;
@@ -56,7 +52,9 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             get
             {
                 double receivedBytes = BytesDownloaded;
-                return receivedBytes > 0 ? receivedBytes / ((double) _downloadSpeedStopwatch.ElapsedMilliseconds / 1000) : 0;
+                return receivedBytes > 0
+                    ? receivedBytes / ((double) _downloadSpeedStopwatch.ElapsedMilliseconds / 1000)
+                    : 0;
             }
         }
 
@@ -96,7 +94,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                     _downloadSpeedStopwatch.Stop();
 
                     if (BytesDownloaded != DownloadSize)
-                        throw new Exception($"Download was completed ({BytesDownloaded} bytes), but did not receive expected size of {DownloadSize} bytes");
+                        throw new Exception(
+                            $"Download was completed ({BytesDownloaded} bytes), but did not receive expected size of {DownloadSize} bytes");
 
                     State = FileDownloaderState.Finalize;
                     ReportProgress(null); //Forced
@@ -130,7 +129,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 _activeDownloads++;
 
                 downloaderWorkers.Enqueue(Task.Run(DequeueAndDownloadChunksAsync, ct));
-                await Task.Delay(1000);
+                await Task.Delay(1000, ct);
             }
 
             await Task.WhenAll(downloaderWorkers);

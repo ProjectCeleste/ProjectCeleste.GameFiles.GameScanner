@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Net;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
@@ -23,8 +22,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             _fileToDownload = fileToDownload;
 
             DownloadTmpFileName =
-                    Path.Combine(tmpFolder,
-                        $"0x{fileToDownload.ToLower().GetHashCode():X4}.0x{fileRange.Start:X8}.tmp");
+                Path.Combine(tmpFolder,
+                    $"0x{fileToDownload.ToLower().GetHashCode():X4}.0x{fileRange.Start:X8}.tmp");
         }
 
         private HttpWebRequest CreateHttpWebRequest()
@@ -45,7 +44,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
             try
             {
-                using (var downloadResponse = (HttpWebResponse)downloadRequest.GetResponse())
+                using (var downloadResponse = (HttpWebResponse) downloadRequest.GetResponse())
                 using (var downloadSource = downloadResponse.GetResponseStream())
                 using (var downloadTarget = new FileStream(DownloadTmpFileName, FileMode.Create, FileAccess.Write))
                 {
@@ -59,8 +58,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
                         progressCallback(bytesRead);
                         _bytesDownloaded += bytesRead;
-                    }
-                    while (bytesRead > 0);
+                    } while (bytesRead > 0);
                 }
             }
             catch

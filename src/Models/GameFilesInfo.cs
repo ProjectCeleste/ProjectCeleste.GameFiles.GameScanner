@@ -1,14 +1,10 @@
-﻿#region Using directives
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
-
-#endregion
 
 namespace ProjectCeleste.GameFiles.GameScanner.Models
 {
@@ -21,12 +17,18 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
         }
 
         [JsonConstructor]
-        public GameFileInfo([JsonProperty(PropertyName = "FileName", Required = Required.Always)] string fileName,
-            [JsonProperty(PropertyName = "CRC32", Required = Required.Always)] uint crc32,
-            [JsonProperty(PropertyName = "Size", Required = Required.Always)] long size,
-            [JsonProperty(PropertyName = "HttpLink", Required = Required.Always)] string httpLink,
-            [JsonProperty(PropertyName = "BinCRC32", Required = Required.Always)] uint binCrc32,
-            [JsonProperty(PropertyName = "BinSize", Required = Required.Always)] long binSize)
+        public GameFileInfo([JsonProperty(PropertyName = "FileName", Required = Required.Always)]
+            string fileName,
+            [JsonProperty(PropertyName = "CRC32", Required = Required.Always)]
+            uint crc32,
+            [JsonProperty(PropertyName = "Size", Required = Required.Always)]
+            long size,
+            [JsonProperty(PropertyName = "HttpLink", Required = Required.Always)]
+            string httpLink,
+            [JsonProperty(PropertyName = "BinCRC32", Required = Required.Always)]
+            uint binCrc32,
+            [JsonProperty(PropertyName = "BinSize", Required = Required.Always)]
+            long binSize)
         {
             FileName = fileName ?? throw new ArgumentNullException(nameof(fileName));
             Crc32 = crc32;
@@ -83,7 +85,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
         }
 
         [JsonConstructor]
-        public GameFilesInfo([JsonProperty(PropertyName = "Version", Required = Required.Always)] Version version,
+        public GameFilesInfo([JsonProperty(PropertyName = "Version", Required = Required.Always)]
+            Version version,
             [JsonProperty(PropertyName = "GameFileInfo", Required = Required.Always)]
             IEnumerable<GameFileInfo> gameFileInfo)
         {
@@ -107,9 +110,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
             set => Version = new Version(value);
         }
 
-        [JsonIgnore]
-        [XmlIgnore]
-        public IDictionary<string, GameFileInfo> GameFileInfo { get; }
+        [JsonIgnore] [XmlIgnore] public IDictionary<string, GameFileInfo> GameFileInfo { get; }
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]

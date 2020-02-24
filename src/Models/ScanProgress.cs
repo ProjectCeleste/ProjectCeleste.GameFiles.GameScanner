@@ -1,8 +1,4 @@
-#region Using directives
-
 using System;
-
-#endregion
 
 namespace ProjectCeleste.GameFiles.GameScanner.Models
 {
