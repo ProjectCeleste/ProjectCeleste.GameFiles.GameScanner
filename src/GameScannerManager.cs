@@ -686,6 +686,9 @@ namespace ProjectCeleste.GameFiles.GameScanner
         public static async Task<GameFileInfo> GenerateGameFileInfo(string file, string fileName,
             string outputFolder, string baseHttpLink, CancellationToken ct = default)
         {
+            if (!Directory.Exists(outputFolder))
+                Directory.CreateDirectory(outputFolder);
+
             if (!baseHttpLink.EndsWith("/"))
                 baseHttpLink += "/";
 
