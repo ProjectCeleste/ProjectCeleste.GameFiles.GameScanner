@@ -648,7 +648,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 baseHttpLink += "/";
             baseHttpLink = Path.Combine(baseHttpLink, "xlive", buildId.ToString()).Replace("\\", "/");
 
-            var xLiveInfo = await GenerateGameFileInfo(xLivePath, "xlive.dll", baseHttpLink, baseHttpLink, ct);
+            var xLiveInfo = await GenerateGameFileInfo(xLivePath, "xlive.dll", outputFolder, baseHttpLink, ct);
 
             var manifestJsonContents = JsonConvert.SerializeObject(xLiveInfo, Formatting.Indented);
             File.WriteAllText(Path.Combine(finalOutputFolder, $"xlive-{buildId}.json"), manifestJsonContents,
