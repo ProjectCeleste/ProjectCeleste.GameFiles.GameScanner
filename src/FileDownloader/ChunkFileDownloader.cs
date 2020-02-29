@@ -13,7 +13,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
     public class ChunkFileDownloader : IFileDownloader
     {
         internal const int MaxChunkSize = 10 * 1024 * 1024; //10Mb
-        private const int MaxConcurrentDownloads = 12;
+        private const int MaxConcurrentDownloads = 6;
 
         private readonly Stopwatch _downloadSpeedStopwatch;
         private readonly string _downloadTempFolder;
