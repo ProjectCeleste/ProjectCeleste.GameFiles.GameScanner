@@ -35,7 +35,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public Exception Error { get; private set; }
 
-        public async Task DownloadAsync(CancellationToken ct = default(CancellationToken))
+        public async Task DownloadAsync(CancellationToken ct = default)
         {
             if (State == FileDownloaderState.Download)
                 return;
@@ -47,48 +47,46 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             if (path != null && !Directory.Exists(path))
                 Directory.CreateDirectory(path);
 
-            using (var webClient = new WebClient())
-            {
-                //
-                webClient.DownloadFileCompleted += DownloadCompleted;
-                webClient.DownloadProgressChanged += DownloadProgressChanged;
+            using var webClient = new WebClient();
+            //
+            webClient.DownloadFileCompleted += DownloadCompleted;
+            webClient.DownloadProgressChanged += DownloadProgressChanged;
 
-                //
-                var cancel = ct.Register(() =>
+            //
+            var cancel = ct.Register(() =>
+            {
+                _stopwatch.Stop();
+                webClient.CancelAsync();
+            }, true);
+
+            _stopwatch.Reset();
+            _stopwatch.Start();
+            using (new Timer(ReportProgress, null, 500, 500))
+            {
+                try
+                {
+                    await webClient.DownloadFileTaskAsync(DownloadUrl, FilePath);
+                    if (BytesDownloaded == DownloadSize)
+                        State = FileDownloaderState.Complete;
+                }
+                finally
                 {
                     _stopwatch.Stop();
                     webClient.CancelAsync();
-                }, true);
-
-                _stopwatch.Reset();
-                _stopwatch.Start();
-                using (new Timer(ReportProgress, null, 500, 500))
-                {
-                    try
-                    {
-                        await webClient.DownloadFileTaskAsync(DownloadUrl, FilePath);
-                        if (BytesDownloaded == DownloadSize)
-                            State = FileDownloaderState.Complete;
-                    }
-                    finally
-                    {
-                        _stopwatch.Stop();
-                        webClient.CancelAsync();
-                        cancel.Dispose();
-                    }
+                    cancel.Dispose();
                 }
+            }
 
-                switch (State)
-                {
-                    case FileDownloaderState.Error:
-                        throw Error;
-                    case FileDownloaderState.Abort:
-                        throw new OperationCanceledException(ct);
-                    case FileDownloaderState.Complete:
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(State), State, null);
-                }
+            switch (State)
+            {
+                case FileDownloaderState.Error:
+                    throw Error;
+                case FileDownloaderState.Abort:
+                    throw new OperationCanceledException(ct);
+                case FileDownloaderState.Complete:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(State), State, null);
             }
         }
 
