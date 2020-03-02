@@ -168,7 +168,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 {
                     if (workerFailedDownloadingOnce)
                     {
-                        await Task.Delay(1000, ct);
                         _chunkDownloadQueue.Enqueue(fileChunk);
                         break;
                     }
