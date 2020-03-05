@@ -29,7 +29,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             FilePath = outputFileName;
 
             if (concurrentDownload <= 0)
-                concurrentDownload = Environment.ProcessorCount * 5;
+                concurrentDownload = 5;
 
             if (concurrentDownload > MaxConcurrentDownloads)
                 concurrentDownload = MaxConcurrentDownloads;
@@ -89,36 +89,14 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
                 _downloadSpeedStopwatch.Start();
                 DownloadSize = await GetDownloadSizeAsync();
 
-                var readRanges = CalculateFileChunkRanges();
-                var fileRanges = readRanges as FileRange[] ?? readRanges.ToArray();
-                _chunkDownloadQueue = new ConcurrentQueue<FileRange>(fileRanges);
-
-                var tasks = Enumerable.Range(1, Math.Min(_concurrentDownloads, _chunkDownloadQueue.Count)).Select(
-                    async workerIndex =>
-                    {
-                        if (workerIndex > 1)
-                            await Task.Delay(1000 * (workerIndex - 1), ct);
-
-                        await DequeueAndDownloadChunksAsync(ct);
-                    });
-
                 ReportProgress(null); //Forced
 
-                var reportProgressTimer = new Timer(ReportProgress, null, 500, 500);
-
-                await Task.WhenAll(tasks); //Start parallel download
-
-                ct.ThrowIfCancellationRequested();
-
-                if (_completedChunks.Count > 0 && _chunkDownloadQueue.Count > 0)
+                using (var reportProgressTimer = new Timer(ReportProgress, null, 500, 500))
                 {
-                    //Try to get missing chunk if any
-                    await DequeueAndDownloadChunksAsync(ct);
+                    await StartDownloadAsync(ct);
+                    _downloadSpeedStopwatch.Stop();
+                    reportProgressTimer.Change(Timeout.Infinite, Timeout.Infinite);
                 }
-
-                _downloadSpeedStopwatch.Stop();
-                reportProgressTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                reportProgressTimer.Dispose();
 
                 ReportProgress(null); //Forced
 
@@ -150,6 +128,30 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             finally
             {
                 ReportProgress(null); //Forced
+            }
+        }
+
+        private async Task StartDownloadAsync(CancellationToken ct = default)
+        {
+            var readRanges = CalculateFileChunkRanges();
+            var fileRanges = readRanges as FileRange[] ?? readRanges.ToArray();
+            _chunkDownloadQueue = new ConcurrentQueue<FileRange>(fileRanges);
+
+            var tasks = Enumerable.Range(1, Math.Min(_concurrentDownloads, _chunkDownloadQueue.Count)).Select(
+                async workerIndex =>
+                {
+                    if (workerIndex > 1)
+                        await Task.Delay(1000 * (workerIndex - 1), ct);
+
+                    await DequeueAndDownloadChunksAsync(ct);
+                });
+
+            await Task.WhenAll(tasks); //Start parallel download
+
+            if (_completedChunks.Count > 0 && _chunkDownloadQueue.Count > 0)
+            {
+                //Try to get missing chunk if any
+                await DequeueAndDownloadChunksAsync(ct);
             }
         }
 
