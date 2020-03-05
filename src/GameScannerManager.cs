@@ -164,7 +164,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         }
 
         public async Task<bool> ScanAndRepair(IProgress<ScanProgress> progress = null,
-            IProgress<ScanSubProgress> subProgress = null)
+            IProgress<ScanSubProgress> subProgress = null, int concurrentDownload = 0)
         {
             EnsureInitialized();
             EnsureGameScannerIsNotRunning();
@@ -201,7 +201,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     progress?.Report(new ScanProgress(fileInfo.FileName,
                         (double) globalProgress / totalSize * 100, i, totalIndex));
 
-                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, subProgress, token);
+                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, subProgress, concurrentDownload, token);
 
                     if (!retVal)
                         break;
@@ -305,7 +305,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         }
 
         public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
-            IProgress<ScanSubProgress> progress = null, CancellationToken ct = default)
+            IProgress<ScanSubProgress> progress = null, int concurrentDownload = 0,  CancellationToken ct = default)
         {
             var filePath = Path.Combine(gameFilePath, fileInfo.FileName);
 
@@ -338,7 +338,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (File.Exists(tempFileName))
                 File.Delete(tempFileName);
 
-            var fileDownloader = new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath);
+            var fileDownloader = concurrentDownload == 1
+                ? (IFileDownloader) new SimpleFileDownloader(fileInfo.HttpLink, tempFileName)
+                : new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath,
+                    concurrentDownload);
 
             if (progress != null)
                 fileDownloader.ProgressChanged += (sender, eventArg) =>

@@ -13,22 +13,29 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
     public class ChunkFileDownloader : IFileDownloader
     {
         internal const int MaxChunkSize = 10 * 1024 * 1024; //10Mb
-        private const int MaxConcurrentDownloads = 6;
+        public const int MaxConcurrentDownloads = 10;
 
+        private readonly int _concurrentDownloads;
         private readonly Stopwatch _downloadSpeedStopwatch;
         private readonly string _downloadTempFolder;
-
         private readonly ConcurrentDictionary<long, string> _completedChunks = new ConcurrentDictionary<long, string>();
+
         private ConcurrentQueue<FileRange> _chunkDownloadQueue;
-
         private long _downloadSizeCompleted;
-        private int _activeDownloads = 1;
-        private bool _downloadFailed = false;
 
-        public ChunkFileDownloader(string httpLink, string outputFileName, string tmpFolder)
+        public ChunkFileDownloader(string httpLink, string outputFileName, string tmpFolder, int concurrentDownload = 0)
         {
             DownloadUrl = httpLink;
             FilePath = outputFileName;
+
+            if (concurrentDownload <= 0)
+                concurrentDownload = 5;
+
+            if (concurrentDownload > MaxConcurrentDownloads)
+                concurrentDownload = MaxConcurrentDownloads;
+
+            _concurrentDownloads = concurrentDownload;
+
             _downloadTempFolder = tmpFolder;
             _downloadSpeedStopwatch = new Stopwatch();
 
@@ -37,7 +44,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             ServicePointManager.MaxServicePointIdleTime = 1000;
         }
 
-        public FileDownloaderState State { get; private set; } = FileDownloaderState.Invalid;
+        public FileDownloaderState State { get; private set; }
 
         public double DownloadProgress => DownloadSize > 0 ? (double) BytesDownloaded / DownloadSize * 100 : 0;
 
@@ -80,31 +87,36 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             try
             {
                 _downloadSpeedStopwatch.Start();
-
-                OnProgressChanged();
-
                 DownloadSize = await GetDownloadSizeAsync();
 
-                var readRanges = CalculateFileChunkRanges();
+                ReportProgress(null); //Forced
 
-                //Parallel download
-                using (new Timer(ReportProgress, null, 100, 100))
+                using (var reportProgressTimer = new Timer(ReportProgress, null, 500, 500))
                 {
-                    await OrchestrateDownloadWorkersAsync(readRanges, ct);
+                    await StartDownloadAsync(ct);
                     _downloadSpeedStopwatch.Stop();
-
-                    if (BytesDownloaded != DownloadSize)
-                        throw new Exception(
-                            $"Download was completed ({BytesDownloaded} bytes), but did not receive expected size of {DownloadSize} bytes");
-
-                    State = FileDownloaderState.Finalize;
-                    ReportProgress(null); //Forced
-
-                    WriteChunksToFile(_completedChunks);
-
-                    State = FileDownloaderState.Complete;
-                    ReportProgress(null); //Forced
+                    reportProgressTimer.Change(Timeout.Infinite, Timeout.Infinite);
                 }
+
+                ReportProgress(null); //Forced
+
+                if (_chunkDownloadQueue.Count > 0)
+                    throw new Exception(
+                        $"Download was incomplete ({_chunkDownloadQueue.Count} missing chunks)");
+
+                if (BytesDownloaded != DownloadSize)
+                    throw new Exception(
+                        $"Download was incomplete ({BytesDownloaded}/{DownloadSize} bytes)");
+
+                State = FileDownloaderState.Finalize;
+                
+                ReportProgress(null); //Forced
+
+                ct.ThrowIfCancellationRequested();
+
+                WriteChunksToFile(_completedChunks);
+
+                State = FileDownloaderState.Complete;
             }
             catch (Exception e)
             {
@@ -115,46 +127,61 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             }
             finally
             {
-                OnProgressChanged();
+                ReportProgress(null); //Forced
             }
         }
 
-        private async Task OrchestrateDownloadWorkersAsync(IEnumerable<FileRange> chunks, CancellationToken ct)
+        private async Task StartDownloadAsync(CancellationToken ct = default)
         {
-            var downloaderWorkers = new ConcurrentQueue<Task>();
-            _chunkDownloadQueue = new ConcurrentQueue<FileRange>(chunks);
+            var readRanges = CalculateFileChunkRanges();
+            var fileRanges = readRanges as FileRange[] ?? readRanges.ToArray();
+            _chunkDownloadQueue = new ConcurrentQueue<FileRange>(fileRanges);
 
-            while (_activeDownloads < MaxConcurrentDownloads && _chunkDownloadQueue.Count > 0 && !_downloadFailed)
+            var tasks = Enumerable.Range(1, Math.Min(_concurrentDownloads, _chunkDownloadQueue.Count)).Select(
+                async workerIndex =>
+                {
+                    if (workerIndex > 1)
+                        await Task.Delay(1000 * (workerIndex - 1), ct);
+
+                    await DequeueAndDownloadChunksAsync(ct);
+                });
+
+            await Task.WhenAll(tasks); //Start parallel download
+
+            if (_completedChunks.Count > 0 && _chunkDownloadQueue.Count > 0)
             {
-                _activeDownloads++;
-
-                downloaderWorkers.Enqueue(Task.Run(DequeueAndDownloadChunksAsync, ct));
-                await Task.Delay(1000, ct);
+                //Try to get missing chunk if any
+                await DequeueAndDownloadChunksAsync(ct);
             }
-
-            await Task.WhenAll(downloaderWorkers);
         }
 
-        private async Task DequeueAndDownloadChunksAsync()
+        private async Task DequeueAndDownloadChunksAsync(CancellationToken ct = default)
         {
-            var workerFailedDownloading = false;
-            var taskId = _activeDownloads;
-
-            while (_chunkDownloadQueue.TryDequeue(out var fileChunk) && !workerFailedDownloading)
+            while (_chunkDownloadQueue.TryDequeue(out var fileChunk))
             {
+                var workerFailedDownloadingOnce = false;
+
+                retry:
                 var chunkDownload = new ChunkDownload(DownloadUrl, fileChunk, _downloadTempFolder);
-                var downloadSuccesfullyCompleted = await chunkDownload.TryDownloadAsync(IncrementTotalDownloadProgress);
+                var downloadSuccessfullyCompleted =
+                    await chunkDownload.TryDownloadAsync(IncrementTotalDownloadProgress, ct);
 
-                if (!downloadSuccesfullyCompleted)
+                if (!downloadSuccessfullyCompleted)
                 {
-                    _chunkDownloadQueue.Enqueue(fileChunk);
-                    workerFailedDownloading = true;
-                    _downloadFailed = true;
+                    if (workerFailedDownloadingOnce)
+                    {
+                        _chunkDownloadQueue.Enqueue(fileChunk);
+                        break;
+                    }
+
+                    workerFailedDownloadingOnce = true;
+                    await Task.Delay(1000, ct);
+                    goto retry;
                 }
-                else
-                {
-                    _completedChunks.TryAdd(fileChunk.Start, chunkDownload.DownloadTmpFileName);
-                }
+
+                _completedChunks.TryAdd(fileChunk.Start, chunkDownload.DownloadTmpFileName);
+
+                await Task.Delay(1000, ct);
             }
         }
 
@@ -176,22 +203,27 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
             var sizeDownloadRequest = WebRequest.Create(DownloadUrl);
             sizeDownloadRequest.Method = "HEAD";
 
-            using (var response = await sizeDownloadRequest.GetResponseAsync())
-            {
-                return long.Parse(response.Headers.Get("Content-Length"));
-            }
+            using var response = await sizeDownloadRequest.GetResponseAsync();
+            return long.Parse(response.Headers.Get("Content-Length"));
         }
 
         private void WriteChunksToFile(IDictionary<long, string> fileChunks)
         {
-            using (var targetFile = new BufferedStream(new FileStream(FilePath, FileMode.Create, FileAccess.Write)))
+            using var targetFile = new BufferedStream(new FileStream(FilePath, FileMode.Create, FileAccess.Write),
+                ChunkDownload.ChunkBufferSize);
+            foreach (var tempFile in fileChunks.ToArray().OrderBy(b => b.Key))
             {
-                foreach (var tempFile in fileChunks.ToArray().OrderBy(b => b.Key))
-                {
-                    using (var sourceChunks = new BufferedStream(File.OpenRead(tempFile.Value)))
-                        sourceChunks.CopyTo(targetFile);
+                using (var sourceChunks =
+                    new BufferedStream(File.OpenRead(tempFile.Value), ChunkDownload.ChunkBufferSize))
+                    sourceChunks.CopyTo(targetFile);
 
+                try
+                {
                     File.Delete(tempFile.Value);
+                }
+                catch
+                {
+                    //
                 }
             }
         }
@@ -203,14 +235,9 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         public event EventHandler ProgressChanged;
 
-        protected virtual void OnProgressChanged()
-        {
-            ProgressChanged?.Invoke(this, null);
-        }
-
         private void ReportProgress(object state)
         {
-            OnProgressChanged();
+            ProgressChanged?.Invoke(this, null);
         }
     }
 }

@@ -17,6 +17,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 
         event EventHandler ProgressChanged;
 
-        Task DownloadAsync(CancellationToken ct = default(CancellationToken));
+        Task DownloadAsync(CancellationToken ct = default);
     }
 }
