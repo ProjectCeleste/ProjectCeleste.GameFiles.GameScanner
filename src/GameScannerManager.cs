@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
-using ProjectCeleste.GameFiles.Tools.L33TZip;
-using ProjectCeleste.GameFiles.Tools.Misc;
+using ProjectCeleste.GameFiles.GameScanner.Utils;
+using ProjectCeleste.GameFiles.Tools.Utils;
 
 namespace ProjectCeleste.GameFiles.GameScanner
 {
@@ -409,7 +409,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             //#4 Extract downloaded file
             ct.ThrowIfCancellationRequested();
-            if (L33TZipUtils.IsL33TZipFile(tempFileName))
+            if (L33TZipUtils.IsL33TZip(tempFileName))
             {
                 var tempFileName2 = $"{tempFileName.Replace(".tmp", string.Empty)}.ext.tmp";
                 //
@@ -427,7 +427,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     };
                 }
 
-                await L33TZipUtils.ExtractL33TZipFileAsync(tempFileName, tempFileName2, ct, extractProgress);
+                await L33TZipUtils.DecompressL33TZipAsync(tempFileName, tempFileName2, extractProgress, ct);
 
                 //#4.1 Check Extracted File
                 ct.ThrowIfCancellationRequested();
@@ -698,7 +698,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             var binFileName = $"{fileName.ToLower().GetHashCode():X4}.bin";
             var outFileName = Path.Combine(outputFolder, binFileName);
 
-            await L33TZipUtils.CompressFileAsL33TZipAsync(file, outFileName, ct);
+            await L33TZipUtils.CompressFileAsL33TZipAsync(file, outFileName, null, ct);
 
             var fileCrc = await Crc32Utils.DoGetCrc32FromFile(file, ct);
             var fileLength = new FileInfo(file).Length;
