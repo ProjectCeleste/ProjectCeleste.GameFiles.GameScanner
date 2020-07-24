@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.705
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ProjectCeleste.GameFiles.GameScanner", "src\ProjectCeleste.GameFiles.GameScanner.csproj", "{3EABF611-99A4-4862-A8B3-13B5D133AEF5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Celeste.GameFiles.GameScanner", "src\Celeste.GameFiles.GameScanner.csproj", "{3EABF611-99A4-4862-A8B3-13B5D133AEF5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
