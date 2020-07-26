@@ -20,10 +20,10 @@ Age of Empires Online © Microsoft Corporation. Celeste Fan Project was created 
     <Authors>Project Celeste</Authors>
     <Company />
     <Product>Celeste.GameFiles.GameScanner</Product>
-    <Version>2.6.1.0</Version>
-    <AssemblyVersion>2.6.1.0</AssemblyVersion>
-    <FileVersion>2.6.1.0</FileVersion>
-    <InformationalVersion>v2.6.1</InformationalVersion>
+    <Version>2.6.2.0</Version>
+    <AssemblyVersion>2.6.2.0</AssemblyVersion>
+    <FileVersion>2.6.2.0</FileVersion>
+    <InformationalVersion>v2.6.2</InformationalVersion>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -40,7 +40,7 @@ Age of Empires Online © Microsoft Corporation. Celeste Fan Project was created 
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
-    <PackageReference Include="Celeste.GameFiles.Tools" Version="2.3.2" />
+    <PackageReference Include="Celeste.GameFiles.Tools" Version="2.3.3" />
     <PackageReference Include="System.ComponentModel.Annotations" Version="4.7.0" />
   </ItemGroup>
 </Project>
