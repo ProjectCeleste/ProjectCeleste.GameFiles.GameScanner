@@ -2,11 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
 using ProjectCeleste.GameFiles.GameScanner.Utils;
@@ -29,7 +26,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private IEnumerable<GameFileInfo> _gameFiles;
 
-        public GameScannerManager(bool isSteam = false) : this(GetGameFilesRootPath(), isSteam)
+        public GameScannerManager(bool isSteam = false) : this(GameFiles.GetGameFilesRootPath(), isSteam)
         {
         }
 
@@ -64,7 +61,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CleanUpTmpFolder();
 
             var gameFileInfos =
-                (await GameFilesInfoFromCelesteManifest(_isSteam)).GameFileInfo.Select(key => key.Value);
+                (await GameFiles.GameFilesInfoFromCelesteManifest(_isSteam)).GameFileInfo.Select(key => key.Value);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (fileInfos.Length == 0)
                 throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
@@ -81,7 +78,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CleanUpTmpFolder();
 
             var gameFileInfos =
-                (await GameFilesInfoFromGameManifest(type, build, _isSteam)).GameFileInfo.Select(key => key.Value);
+                (await GameFiles.GameFilesInfoFromGameManifest(type, build, _isSteam)).GameFileInfo.Select(key => key.Value);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (fileInfos.Length == 0)
                 throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
@@ -163,8 +160,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return retVal;
         }
 
-        public async Task<bool> ScanAndRepair(IProgress<ScanProgress> progress = null,
-            IProgress<ScanSubProgress> subProgress = null, int concurrentDownload = 0)
+        public async Task ScanAndRepair(IProgress<ScanProgress> progress = null, IProgress<ScanSubProgress> subProgress = null)
         {
             EnsureInitialized();
             EnsureGameScannerIsNotRunning();
@@ -185,13 +181,12 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                 CleanUpTmpFolder();
 
-                var retVal = false;
-
                 var totalSize = _gameFiles.Select(key => key.BinSize).Sum();
                 var globalProgress = 0L;
                 var totalIndex = _gameFiles.Count();
                 var gameFiles = _gameFiles.OrderByDescending(key => key.FileName.Contains("\\"))
                     .ThenBy(key => key.FileName).ToArray();
+
                 for (var i = 0; i < gameFiles.Length; i++)
                 {
                     token.ThrowIfCancellationRequested();
@@ -201,15 +196,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     progress?.Report(new ScanProgress(fileInfo.FileName,
                         (double) globalProgress / totalSize * 100, i, totalIndex));
 
-                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, subProgress, concurrentDownload, token);
-
-                    if (!retVal)
-                        break;
+                    await ScanAndRepairFile(fileInfo, _filesRootPath, subProgress, token);
 
                     globalProgress += fileInfo.BinSize;
                 }
-
-                return retVal;
             }
             finally
             {
@@ -284,7 +274,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 throw new Exception(
                     $"The game file {gameFilePath} was expected to have a size of {expectedFileSize} but was {gameFileInfo.Length}");
 
-            var gameFileCrc32 = await Crc32Utils.DoGetCrc32FromFile(gameFilePath, ct, progress);
+            var gameFileCrc32 = await Crc32Utils.ComputeCrc32FromFileAsync(gameFilePath, ct, progress);
 
             if (gameFileCrc32 != expectedCrc32)
                 throw new Exception(
@@ -295,7 +285,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CancellationToken ct = default, IProgress<double> progress = null)
         {
             return RunFileQuickCheck(gameFilePath, expectedFileSize) &&
-                   expectedCrc32 == await Crc32Utils.DoGetCrc32FromFile(gameFilePath, ct, progress);
+                   expectedCrc32 == await Crc32Utils.ComputeCrc32FromFileAsync(gameFilePath, ct, progress);
         }
 
         public static bool RunFileQuickCheck(string gameFilePath, long expectedFileSize)
@@ -304,8 +294,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return fi.Exists && fi.Length == expectedFileSize;
         }
 
-        public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
-            IProgress<ScanSubProgress> progress = null, int concurrentDownload = 0,  CancellationToken ct = default)
+        public static async Task ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
+            IProgress<ScanSubProgress> progress = null, CancellationToken ct = default)
         {
             var filePath = Path.Combine(gameFilePath, fileInfo.FileName);
 
@@ -327,7 +317,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (await RunFileCheck(filePath, fileInfo.Size, fileInfo.Crc32, ct, subProgressCheck))
             {
                 progress?.Report(new ScanSubProgress(ScanSubProgressStep.End, 100));
-                return true;
             }
 
             //#2 Download File
@@ -338,10 +327,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             if (File.Exists(tempFileName))
                 File.Delete(tempFileName);
 
-            var fileDownloader = concurrentDownload == 1
-                ? (IFileDownloader) new SimpleFileDownloader(fileInfo.HttpLink, tempFileName)
-                : new ChunkFileDownloader(fileInfo.HttpLink, tempFileName, GameScannerTempPath,
-                    concurrentDownload);
+            var fileDownloader = new FileDownloader.FileDownloader(fileInfo.HttpLink, tempFileName);
 
             if (progress != null)
                 fileDownloader.ProgressChanged += (sender, eventArg) =>
@@ -474,241 +460,6 @@ namespace ProjectCeleste.GameFiles.GameScanner
             //#6 End
             progress?.Report(new ScanSubProgress(
                 ScanSubProgressStep.End, 100));
-
-            return true;
-        }
-
-        #endregion
-
-        #region Get GameFilesInfo
-
-        public static string GetGameFilesRootPath()
-        {
-            {
-                //Custom Path 1
-                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spartan.exe");
-                if (File.Exists(path))
-                    return Path.GetDirectoryName(path);
-
-                //Custom Path 2
-                path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AOEO", "Spartan.exe");
-                if (File.Exists(path))
-                    return Path.GetDirectoryName(path);
-
-                //Custom Path 3
-                if (Environment.Is64BitOperatingSystem)
-                {
-                    path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                        "Age Of Empires Online", "Spartan.exe");
-                    if (File.Exists(path))
-                        return Path.GetDirectoryName(path);
-                }
-
-                //Custom Path 4
-                path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                    "Age Of Empires Online", "Spartan.exe");
-                if (File.Exists(path))
-                    return Path.GetDirectoryName(path);
-
-                //Steam 1
-                if (Environment.Is64BitOperatingSystem)
-                {
-                    path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steam",
-                        "steamapps", "common", "Age Of Empires Online", "Spartan.exe");
-                    if (File.Exists(path))
-                        return Path.GetDirectoryName(path);
-                }
-
-                //Steam 2
-                path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Steam",
-                    "steamapps", "common", "Age Of Empires Online", "Spartan.exe");
-                if (File.Exists(path))
-                    return Path.GetDirectoryName(path);
-
-                //Original Game Path
-                path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Local",
-                    "Microsoft", "Age Of Empires Online", "Spartan.exe");
-                return File.Exists(path)
-                    ? Path.GetDirectoryName(path)
-                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AOEO");
-            }
-        }
-
-        public static async Task<GameFilesInfo> GameFilesInfoFromGameManifest(string type = "production",
-            int build = 6148, bool isSteam = false)
-        {
-            string txt;
-            using (var client = new WebClient())
-            {
-                txt = await client.DownloadStringTaskAsync(
-                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/manifest.txt");
-            }
-
-            var retVal = from line in txt.Split(new[] {Environment.NewLine, "\r\n"},
-                    StringSplitOptions.RemoveEmptyEntries)
-                where line.StartsWith("+")
-                where
-                    // Launcher
-                    !line.StartsWith("+AoeOnlineDlg.dll", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+AoeOnlinePatch.dll", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+expapply.dll", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherLocList.txt", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherStrings-de-DE.xml", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherStrings-en-US.xml", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherStrings-es-ES.xml", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherStrings-fr-FR.xml", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherStrings-it-IT.xml", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherStrings-zh-CHT.xml", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+AOEOnline.exe.cfg", StringComparison.OrdinalIgnoreCase) &&
-                    //Beta Launcher
-                    !line.StartsWith("+Launcher.exe", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherReplace.exe", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+LauncherLocList.txt", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+AOEO_Privacy.rtf", StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith("+pw32b.dll", StringComparison.OrdinalIgnoreCase) &&
-                    //Steam                      
-                    (!line.StartsWith("+steam_api.dll", StringComparison.OrdinalIgnoreCase) || isSteam &&
-                     line.StartsWith("+steam_api.dll", StringComparison.OrdinalIgnoreCase)) &&
-                    //Junk
-                    !line.StartsWith("+t3656t4234.tmp", StringComparison.OrdinalIgnoreCase)
-                select line.Split('|')
-                into lineSplit
-                select new GameFileInfo(lineSplit[0].Substring(1, lineSplit[0].Length - 1),
-                    Convert.ToUInt32(lineSplit[1]),
-                    Convert.ToInt64(lineSplit[2]),
-                    $"http://spartan.msgamestudios.com/content/spartan/{type}/{build}/{lineSplit[3]}",
-                    Convert.ToUInt32(lineSplit[4]),
-                    Convert.ToInt64(lineSplit[5]));
-
-            return new GameFilesInfo(new Version(4, 0, 0, 6148), retVal);
-        }
-
-        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false)
-        {
-            //Load default manifest
-            var gameFilesInfo = await GameFilesInfoFromGameManifest(isSteam: isSteam);
-
-            //Load Celeste override
-            string manifestJsonContents;
-            using (var client = new WebClient())
-            {
-                manifestJsonContents = await client.DownloadStringTaskAsync(
-                    "https://downloads.projectceleste.com/game_files/manifest_override.json");
-            }
-
-            var gameFilesInfoOverride = JsonConvert.DeserializeObject<GameFilesInfo>(manifestJsonContents);
-            gameFilesInfo.Version = gameFilesInfoOverride.Version;
-            foreach (var fileInfo in gameFilesInfoOverride.GameFileInfo.Select(key => key.Value))
-                gameFilesInfo.GameFileInfo[fileInfo.FileName] = fileInfo;
-
-            //Load xLive override
-            string manifestXLiveJsonContents;
-            using (var client = new WebClient())
-            {
-                manifestXLiveJsonContents = await client.DownloadStringTaskAsync(
-                    "https://downloads.projectceleste.com/game_files/xlive.json");
-            }
-
-            gameFilesInfo.GameFileInfo["xlive.dll"] =
-                JsonConvert.DeserializeObject<GameFileInfo>(manifestXLiveJsonContents);
-
-            //
-            return gameFilesInfo;
-        }
-
-        #endregion
-
-        #region Create GameFilesInfo Package
-
-        public static async Task CreateGameUpdatePackage(string inputFolder, string outputFolder,
-            string baseHttpLink, Version buildId, CancellationToken ct = default)
-        {
-            var finalOutputFolder = Path.Combine(outputFolder, "bin_override", buildId.ToString());
-
-            if (!baseHttpLink.EndsWith("/"))
-                baseHttpLink += "/";
-            baseHttpLink = Path.Combine(baseHttpLink, "bin_override", buildId.ToString()).Replace("\\", "/");
-
-            var gameFiles = await GenerateGameFilesInfo(inputFolder, finalOutputFolder, baseHttpLink, buildId, ct);
-
-            if (gameFiles.GameFileInfo.Count < 1)
-                throw new Exception($"No game files found in {inputFolder}");
-
-            var manifestJsonContents = JsonConvert.SerializeObject(gameFiles, Formatting.Indented);
-            File.WriteAllText(Path.Combine(finalOutputFolder, $"manifest_override-{buildId}.json"),
-                manifestJsonContents,
-                Encoding.UTF8);
-            File.WriteAllText(Path.Combine(outputFolder, "manifest_override.json"), manifestJsonContents,
-                Encoding.UTF8);
-        }
-
-        public static async Task CreateXLiveUpdatePackage(string xLivePath, string outputFolder,
-            string baseHttpLink, Version buildId, CancellationToken ct = default)
-        {
-            var finalOutputFolder = Path.Combine(outputFolder, "xlive", buildId.ToString());
-
-            if (!baseHttpLink.EndsWith("/"))
-                baseHttpLink += "/";
-            baseHttpLink = Path.Combine(baseHttpLink, "xlive", buildId.ToString()).Replace("\\", "/");
-
-            var xLiveInfo = await GenerateGameFileInfo(xLivePath, "xlive.dll", finalOutputFolder, baseHttpLink, ct);
-
-            var manifestJsonContents = JsonConvert.SerializeObject(xLiveInfo, Formatting.Indented);
-            File.WriteAllText(Path.Combine(finalOutputFolder, $"xlive-{buildId}.json"), manifestJsonContents,
-                Encoding.UTF8);
-            File.WriteAllText(Path.Combine(outputFolder, "xlive.json"), manifestJsonContents, Encoding.UTF8);
-        }
-
-        public static async Task<GameFilesInfo> GenerateGameFilesInfo(string inputFolder, string outputFolder,
-            string baseHttpLink, Version buildId, CancellationToken ct = default)
-        {
-            if (Directory.Exists(outputFolder))
-                Directory.Delete(outputFolder, true);
-
-            Directory.CreateDirectory(outputFolder);
-
-            var newFilesInfo = new List<GameFileInfo>();
-            foreach (var file in Directory.GetFiles(inputFolder, "*", SearchOption.AllDirectories))
-            {
-                ct.ThrowIfCancellationRequested();
-
-                var rootPath = inputFolder;
-                if (!rootPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
-                    rootPath += Path.DirectorySeparatorChar;
-
-                var fileName = file.Replace(rootPath, string.Empty);
-
-                var newInfo = await GenerateGameFileInfo(file, fileName, outputFolder, baseHttpLink, ct);
-
-                newFilesInfo.Add(newInfo);
-            }
-
-            return new GameFilesInfo(buildId, newFilesInfo);
-        }
-
-        public static async Task<GameFileInfo> GenerateGameFileInfo(string file, string fileName,
-            string outputFolder, string baseHttpLink, CancellationToken ct = default)
-        {
-            if (!Directory.Exists(outputFolder))
-                Directory.CreateDirectory(outputFolder);
-
-            if (!baseHttpLink.EndsWith("/"))
-                baseHttpLink += "/";
-
-            var binFileName = $"{fileName.ToLower().GetHashCode():X4}.bin";
-            var outFileName = Path.Combine(outputFolder, binFileName);
-
-            await L33TZipUtils.CompressFileAsL33TZipAsync(file, outFileName, null, ct);
-
-            var fileCrc = await Crc32Utils.DoGetCrc32FromFile(file, ct);
-            var fileLength = new FileInfo(file).Length;
-
-            var externalLocation = Path.Combine(baseHttpLink, binFileName).Replace("\\", "/");
-            var outFileCrc = await Crc32Utils.DoGetCrc32FromFile(outFileName, ct);
-            var outFileLength = new FileInfo(outFileName).Length;
-
-            return new GameFileInfo(fileName, fileCrc, fileLength, externalLocation,
-                outFileCrc, outFileLength);
         }
 
         #endregion
