@@ -8,34 +8,8 @@ namespace ProjectCeleste.GameFiles.GameScanner.Utils
 {
     public static class Crc32Utils
     {
-        public static uint GetCrc32FromFile(string fileName)
-        {
-            if (!File.Exists(fileName))
-                throw new FileNotFoundException($"File '{fileName}' not found!", fileName);
-
-            using (var fs = File.OpenRead(fileName))
-            {
-                var result = 0u;
-                var buffer = new byte[4096];
-                int read;
-                var totalread = 0L;
-                var length = fs.Length;
-                while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    totalread += read;
-
-                    result = Crc32Algorithm.Append(result, buffer, 0, read);
-
-                    if (totalread >= length)
-                        break;
-                }
-
-                return result;
-            }
-        }
-
-        public static async Task<uint> DoGetCrc32FromFile(string fileName,
-            CancellationToken ct = default(CancellationToken),
+        public static async Task<uint> ComputeCrc32FromFileAsync(string fileName,
+            CancellationToken ct = default,
             IProgress<double> progress = null)
         {
             return await Task.Run(() =>
@@ -47,29 +21,28 @@ namespace ProjectCeleste.GameFiles.GameScanner.Utils
                 {
                     var result = 0u;
                     var buffer = new byte[4096];
-                    int read;
-                    var totalread = 0L;
-                    var length = fs.Length;
-                    var lastProgress = 0d;
+                    int bytesRead;
+                    var totalBytesRead = 0L;
+                    var fileLength = fs.Length;
+                    var percentageCompleted = 0d;
 
-                    while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
+                    while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        //
                         ct.ThrowIfCancellationRequested();
 
-                        totalread += read;
+                        totalBytesRead += bytesRead;
 
-                        result = Crc32Algorithm.Append(result, buffer, 0, read);
+                        result = Crc32Algorithm.Append(result, buffer, 0, bytesRead);
 
-                        var newProgress = (double)totalread / length * 100;
+                        var currentPercentageCompleted = (double)totalBytesRead / fileLength * 100;
 
-                        if (newProgress - lastProgress > 1)
+                        if (currentPercentageCompleted - percentageCompleted > 1)
                         {
-                            progress?.Report(newProgress);
-                            lastProgress = newProgress;
+                            progress?.Report(currentPercentageCompleted);
+                            percentageCompleted = currentPercentageCompleted;
                         }
 
-                        if (totalread >= length)
+                        if (totalBytesRead >= fileLength)
                             break;
                     }
 

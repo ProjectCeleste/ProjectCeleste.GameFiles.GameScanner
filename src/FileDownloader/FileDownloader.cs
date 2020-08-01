@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 
 namespace ProjectCeleste.GameFiles.GameScanner.FileDownloader
 {
-    public class SimpleFileDownloader : IFileDownloader
+    public class FileDownloader : IFileDownloader
     {
         private readonly Stopwatch _stopwatch;
 
-        public SimpleFileDownloader(string httpLink, string outputFileName)
+        public FileDownloader(string url, string outputFileName)
         {
-            DownloadUrl = httpLink;
+            DownloadUrl = url;
             FilePath = outputFileName;
             _stopwatch = new Stopwatch();
         }
