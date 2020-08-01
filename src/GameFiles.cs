@@ -112,7 +112,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return new GameFilesInfo(new Version(4, 0, 0, 6148), retVal);
         }
 
-        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false, ManifestConfiguration manifestConfiguration)
+        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(ManifestConfiguration manifestConfiguration, bool isSteam = false)
         {
             //Load default manifest
             var gameFilesInfo = await GameFilesInfoFromGameManifest(isSteam: isSteam);

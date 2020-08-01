@@ -62,7 +62,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CleanUpTmpFolder();
 
             var gameFileInfos =
-                (await GameFiles.GameFilesInfoFromCelesteManifest(_isSteam, manifestConfiguration)).GameFileInfo.Select(key => key.Value);
+                (await GameFiles.GameFilesInfoFromCelesteManifest(manifestConfiguration, _isSteam)).GameFileInfo.Select(key => key.Value);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (fileInfos.Length == 0)
                 throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
