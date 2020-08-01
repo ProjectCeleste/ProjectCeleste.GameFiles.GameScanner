@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Celeste.GameFiles.GameScanner.Configuration;
+using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.Models;
 using System;
 using System.IO;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace ProjectCeleste.GameFiles.GameScanner
 {
-    public class GameFiles
+    public static class GameFiles
     {
         public static string GetGameFilesRootPath()
         {
@@ -111,7 +112,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return new GameFilesInfo(new Version(4, 0, 0, 6148), retVal);
         }
 
-        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false)
+        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false, ManifestConfiguration manifestConfiguration)
         {
             //Load default manifest
             var gameFilesInfo = await GameFilesInfoFromGameManifest(isSteam: isSteam);
@@ -120,8 +121,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             string manifestJsonContents;
             using (var client = new WebClient())
             {
-                manifestJsonContents = await client.DownloadStringTaskAsync(
-                    "https://downloads.projectceleste.com/game_files/manifest_override.json");
+                manifestJsonContents = await client.DownloadStringTaskAsync(manifestConfiguration.GameFilesManifestLocation);
             }
 
             var gameFilesInfoOverride = JsonConvert.DeserializeObject<GameFilesInfo>(manifestJsonContents);
@@ -133,8 +133,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             string manifestXLiveJsonContents;
             using (var client = new WebClient())
             {
-                manifestXLiveJsonContents = await client.DownloadStringTaskAsync(
-                    "https://downloads.projectceleste.com/game_files/xlive.json");
+                manifestXLiveJsonContents = await client.DownloadStringTaskAsync(manifestConfiguration.XLiveManifestLocation);
             }
 
             gameFilesInfo.GameFileInfo["xlive.dll"] =

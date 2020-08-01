@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Celeste.GameFiles.GameScanner.Configuration;
 using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
 using ProjectCeleste.GameFiles.GameScanner.Utils;
@@ -53,15 +54,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CleanUpTmpFolder();
         }
 
-        public async Task InitializeFromCelesteManifest()
+        public async Task InitializeFromCelesteManifest(ManifestConfiguration manifestConfiguration)
         {
             if (_gameFiles?.Any() == true)
-                throw new Exception("Already Initialized");
+                throw new Exception("Game files has already been loaded");
 
             CleanUpTmpFolder();
 
             var gameFileInfos =
-                (await GameFiles.GameFilesInfoFromCelesteManifest(_isSteam)).GameFileInfo.Select(key => key.Value);
+                (await GameFiles.GameFilesInfoFromCelesteManifest(_isSteam, manifestConfiguration)).GameFileInfo.Select(key => key.Value);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (fileInfos.Length == 0)
                 throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
@@ -73,7 +74,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             int build = 6148)
         {
             if (_gameFiles?.Any() == true)
-                throw new Exception("Already Initialized");
+                throw new Exception("Game files has already been loaded");
 
             CleanUpTmpFolder();
 

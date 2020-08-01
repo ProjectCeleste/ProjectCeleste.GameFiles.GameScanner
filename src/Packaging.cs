@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace Celeste.GameFiles.GameScanner
 {
-    public class Packaging
+    public static class Packaging
     {
         public static async Task CreateGameUpdatePackage(string inputFolder, string outputFolder,
             string baseHttpLink, Version buildId, CancellationToken ct = default)
