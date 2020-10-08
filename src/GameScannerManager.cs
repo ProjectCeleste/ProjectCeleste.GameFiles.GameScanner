@@ -580,7 +580,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     Convert.ToUInt32(lineSplit[4]),
                     Convert.ToInt64(lineSplit[5]));
 
-            return new GameFilesInfo(new Version(4, 0, 0, 6148), retVal);
+            return new GameFilesInfo(new GameVersion(4, 0, 0, 6148), retVal);
         }
 
         public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false)
@@ -683,7 +683,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 newFilesInfo.Add(newInfo);
             }
 
-            return new GameFilesInfo(buildId, newFilesInfo);
+            return new GameFilesInfo(new GameVersion(buildId), newFilesInfo);
         }
 
         public static async Task<GameFileInfo> GenerateGameFileInfo(string file, string fileName,

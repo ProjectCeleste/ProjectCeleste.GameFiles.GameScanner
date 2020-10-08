@@ -80,13 +80,13 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
     {
         public GameFilesInfo()
         {
-            Version = new Version(4, 0, 0, 6148);
+            Version = new GameVersion(4, 0, 0, 6148);
             GameFileInfo = new Dictionary<string, GameFileInfo>(StringComparer.OrdinalIgnoreCase);
         }
 
         [JsonConstructor]
         public GameFilesInfo([JsonProperty(PropertyName = "Version", Required = Required.Always)]
-            Version version,
+            GameVersion version,
             [JsonProperty(PropertyName = "GameFileInfo", Required = Required.Always)]
             IEnumerable<GameFileInfo> gameFileInfo)
         {
@@ -98,7 +98,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
         [Required]
         [JsonProperty(PropertyName = "Version", Required = Required.Always)]
         [XmlIgnore]
-        public Version Version { get; set; }
+        public GameVersion Version { get; set; }
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -107,7 +107,7 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
         public string VersionString
         {
             get => Version.ToString();
-            set => Version = new Version(value);
+            set => Version = new GameVersion(value);
         }
 
         [JsonIgnore] [XmlIgnore] public IDictionary<string, GameFileInfo> GameFileInfo { get; }
@@ -128,6 +128,43 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
                 foreach (var item in value)
                     GameFileInfo.Add(item.FileName, item);
             }
+        }
+    }
+
+    public class GameVersion
+    {
+        public int Major { get; set; }
+        public int Minor { get; set; }
+        public int Build { get; set; }
+        public int Revision { get; set; }
+        public int MajorRevision { get; set; }
+        public int MinorRevision { get; set; }
+
+        public GameVersion() { }
+
+        public GameVersion(string val) : this(new Version(val))
+        {
+        }
+
+        public GameVersion(Version version)
+        {
+            Major = version.Major;
+            Minor = version.Minor;
+            Build = version.Build;
+            Revision = version.Revision;
+        }
+
+        public GameVersion(int major, int minor, int build, int revision)
+        {
+            Major = major;
+            Minor = minor;
+            Build = build;
+            Revision = revision;
+        }
+
+        public Version ToVersion()
+        {
+            return new Version(Major, Minor, Build, Revision);
         }
     }
 }
