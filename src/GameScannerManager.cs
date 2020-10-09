@@ -123,7 +123,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                             throw;
                         }
 
-                        if (!RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size))
+                        if (!RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.GetPlatformIndependentFilePath()), fileInfo.Size))
                         {
                             retVal = false;
                             state.Break();
@@ -144,7 +144,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         var fileInfo = fileInfos[i];
                         token.ThrowIfCancellationRequested();
 
-                        if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.FileName), fileInfo.Size,
+                        if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.GetPlatformIndependentFilePath()), fileInfo.Size,
                             fileInfo.Crc32, token))
                             return false;
 
@@ -307,7 +307,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
         public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
             IProgress<ScanSubProgress> progress = null, int concurrentDownload = 0,  CancellationToken ct = default)
         {
-            var filePath = Path.Combine(gameFilePath, fileInfo.FileName);
+            var filePath = Path.Combine(gameFilePath, fileInfo.GetPlatformIndependentFilePath());
 
             //#1 Check File
             ct.ThrowIfCancellationRequested();
