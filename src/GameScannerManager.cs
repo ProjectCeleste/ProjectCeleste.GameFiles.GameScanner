@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Celeste.GameFiles.GameScanner.PathMapping;
 using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
@@ -97,6 +98,9 @@ namespace ProjectCeleste.GameFiles.GameScanner
             _scanIsRunning = true;
 
             var retVal = true;
+
+            var pathTransformer = await CreatePathTransformer();
+
             try
             {
                 _cts?.Cancel();
@@ -123,7 +127,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                             throw;
                         }
 
-                        if (!RunFileQuickCheck(Path.Combine(_filesRootPath, fileInfo.GetPlatformIndependentFilePath()), fileInfo.Size))
+                        if (!RunFileQuickCheck(Path.Combine(_filesRootPath, pathTransformer.TransformPath(fileInfo.FileName)), fileInfo.Size))
                         {
                             retVal = false;
                             state.Break();
@@ -144,7 +148,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                         var fileInfo = fileInfos[i];
                         token.ThrowIfCancellationRequested();
 
-                        if (!await RunFileCheck(Path.Combine(_filesRootPath, fileInfo.GetPlatformIndependentFilePath()), fileInfo.Size,
+                        if (!await RunFileCheck(Path.Combine(_filesRootPath, pathTransformer.TransformPath(fileInfo.FileName)), fileInfo.Size,
                             fileInfo.Crc32, token))
                             return false;
 
@@ -183,6 +187,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
                 var token = _cts.Token;
 
+                var pathTransformer = await CreatePathTransformer();
+
                 CleanUpTmpFolder();
 
                 var retVal = false;
@@ -201,7 +207,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     progress?.Report(new ScanProgress(fileInfo.FileName,
                         (double) globalProgress / totalSize * 100, i, totalIndex));
 
-                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, subProgress, concurrentDownload, token);
+                    retVal = await ScanAndRepairFile(fileInfo, _filesRootPath, pathTransformer, subProgress, concurrentDownload, token);
 
                     if (!retVal)
                         break;
@@ -270,6 +276,15 @@ namespace ProjectCeleste.GameFiles.GameScanner
             }
         }
 
+        private static async Task<PathTransformer> CreatePathTransformer()
+        {
+            var originalManifest = await GameFilesInfoFromGameManifest();
+            var originalPaths = originalManifest.GameFileInfo.Values.Select(t => t.FileName).ToArray();
+            var transformerBuilder = new PathTransformerBuilder();
+
+            return new PathTransformer(transformerBuilder.Build(originalPaths));
+        }
+
         #region GameFile
 
         public static async Task EnsureValidGameFile(string gameFilePath, long expectedFileSize, uint expectedCrc32,
@@ -305,9 +320,10 @@ namespace ProjectCeleste.GameFiles.GameScanner
         }
 
         public static async Task<bool> ScanAndRepairFile(GameFileInfo fileInfo, string gameFilePath,
-            IProgress<ScanSubProgress> progress = null, int concurrentDownload = 0,  CancellationToken ct = default)
+            PathTransformer pathTransformer, IProgress<ScanSubProgress> progress = null,
+            int concurrentDownload = 0,  CancellationToken ct = default)
         {
-            var filePath = Path.Combine(gameFilePath, fileInfo.GetPlatformIndependentFilePath());
+            var filePath = Path.Combine(gameFilePath, pathTransformer.TransformPath(fileInfo.FileName));
 
             //#1 Check File
             ct.ThrowIfCancellationRequested();

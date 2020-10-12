@@ -72,11 +72,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
         [JsonProperty(PropertyName = "BinSize", Required = Required.Always)]
         [XmlAttribute(AttributeName = "BinSize")]
         public long BinSize { get; set; }
-
-        public string GetPlatformIndependentFilePath()
-        {
-            return FileName?.Replace("\\", "/");
-        }
     }
 
     [JsonObject(Title = "GameFilesInfo", Description = "")]
