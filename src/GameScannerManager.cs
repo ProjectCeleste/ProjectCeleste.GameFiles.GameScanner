@@ -714,7 +714,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             var binFileName = $"{fileName.ToLower().GetHashCode():X4}.bin";
             var outFileName = Path.Combine(outputFolder, binFileName);
 
-            await L33TZipUtils.CompressFileAsL33TZipAsync(file, outFileName, null, ct);
+            await L33TZipUtils.CompressFileAsL33TZipAsync(file, outFileName, ct);
 
             var fileCrc = await Crc32Utils.DoGetCrc32FromFile(file, ct);
             var fileLength = new FileInfo(file).Length;
