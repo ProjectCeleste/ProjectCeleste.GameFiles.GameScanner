@@ -11,7 +11,7 @@ using Newtonsoft.Json;
 using ProjectCeleste.GameFiles.GameScanner.FileDownloader;
 using ProjectCeleste.GameFiles.GameScanner.Models;
 using ProjectCeleste.GameFiles.GameScanner.Utils;
-using ProjectCeleste.GameFiles.Tools.Utils;
+using ProjectCeleste.GameFiles.Tools.L33TZip;
 
 namespace ProjectCeleste.GameFiles.GameScanner
 {
@@ -425,7 +425,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
             //#4 Extract downloaded file
             ct.ThrowIfCancellationRequested();
-            if (L33TZipUtils.IsL33TZip(tempFileName))
+            if (L33TZipUtils.IsL33TZipFile(tempFileName))
             {
                 var tempFileName2 = $"{tempFileName.Replace(".tmp", string.Empty)}.ext.tmp";
                 //
@@ -443,7 +443,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                     };
                 }
 
-                await L33TZipUtils.DecompressL33TZipAsync(tempFileName, tempFileName2, extractProgress, ct);
+                await L33TZipUtils.ExtractL33TZipFileAsync(tempFileName, tempFileName2, ct, extractProgress);
 
                 //#4.1 Check Extracted File
                 ct.ThrowIfCancellationRequested();
@@ -684,7 +684,9 @@ namespace ProjectCeleste.GameFiles.GameScanner
             Directory.CreateDirectory(outputFolder);
 
             var newFilesInfo = new List<GameFileInfo>();
-            foreach (var file in Directory.GetFiles(inputFolder, "*", SearchOption.AllDirectories))
+            var gameFiles = Directory.GetFiles(inputFolder, "*", SearchOption.AllDirectories);
+
+            await Task.WhenAll(gameFiles.Select(async file =>
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -697,7 +699,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
                 var newInfo = await GenerateGameFileInfo(file, fileName, outputFolder, baseHttpLink, ct);
 
                 newFilesInfo.Add(newInfo);
-            }
+            }));
 
             return new GameFilesInfo(new GameVersion(buildId), newFilesInfo);
         }
