@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
@@ -38,37 +37,26 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
             BinSize = binSize;
         }
 
-        [Key]
-        [Required(AllowEmptyStrings = false)]
         [JsonProperty(PropertyName = "FileName", Required = Required.Always)]
         [XmlAttribute(AttributeName = "FileName")]
         public string FileName { get; set; }
 
-        [Required]
-        [Range(0, uint.MaxValue)]
         [JsonProperty(PropertyName = "CRC32", Required = Required.Always)]
         [XmlAttribute(AttributeName = "CRC32")]
         public uint Crc32 { get; set; }
 
-        [Required]
-        [Range(0, long.MaxValue)]
         [JsonProperty(PropertyName = "Size", Required = Required.Always)]
         [XmlAttribute(AttributeName = "Size")]
         public long Size { get; set; }
 
-        [Required(AllowEmptyStrings = false)]
         [JsonProperty(PropertyName = "HttpLink", Required = Required.Always)]
         [XmlAttribute(AttributeName = "HttpLink")]
         public string HttpLink { get; set; }
 
-        [Required]
-        [Range(0, uint.MaxValue)]
         [JsonProperty(PropertyName = "BinCRC32", Required = Required.Always)]
         [XmlAttribute(AttributeName = "BinCRC32")]
         public uint BinCrc32 { get; set; }
 
-        [Required]
-        [Range(0, long.MaxValue)]
         [JsonProperty(PropertyName = "BinSize", Required = Required.Always)]
         [XmlAttribute(AttributeName = "BinSize")]
         public long BinSize { get; set; }
@@ -95,7 +83,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
                 StringComparer.OrdinalIgnoreCase);
         }
 
-        [Required]
         [JsonProperty(PropertyName = "Version", Required = Required.Always)]
         [XmlIgnore]
         public GameVersion Version { get; set; }
@@ -114,7 +101,6 @@ namespace ProjectCeleste.GameFiles.GameScanner.Models
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Required]
         [JsonProperty(PropertyName = "GameFileInfo", Required = Required.Always)]
         [XmlElement(ElementName = "FilesInfo")]
         public GameFileInfo[] GameFileInfoArray
