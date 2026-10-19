@@ -24,23 +24,26 @@ namespace ProjectCeleste.GameFiles.GameScanner
 
         private readonly bool _isSteam;
 
+        private readonly bool _isPreview;
+
         private bool _scanIsRunning;
 
         private CancellationTokenSource _cts;
 
         private IEnumerable<GameFileInfo> _gameFiles;
 
-        public GameScannerManager(bool isSteam = false) : this(GetGameFilesRootPath(), isSteam)
+        public GameScannerManager(bool isSteam = false, bool isPreview = false) : this(GetGameFilesRootPath(), isSteam, isPreview)
         {
         }
 
-        public GameScannerManager(string filesRootPath, bool isSteam = false)
+        public GameScannerManager(string filesRootPath, bool isSteam = false, bool isPreview = false)
         {
             if (string.IsNullOrEmpty(filesRootPath))
                 throw new ArgumentException("Game files path is null or empty", nameof(filesRootPath));
 
             _filesRootPath = filesRootPath;
             _isSteam = isSteam;
+            _isPreview = isPreview;
             _scanIsRunning = false;
         }
 
@@ -65,7 +68,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             CleanUpTmpFolder();
 
             var gameFileInfos =
-                (await GameFilesInfoFromCelesteManifest(_isSteam)).GameFileInfo.Select(key => key.Value);
+                (await GameFilesInfoFromCelesteManifest(_isSteam, _isPreview)).GameFileInfo.Select(key => key.Value);
             var fileInfos = gameFileInfos as GameFileInfo[] ?? gameFileInfos.ToArray();
             if (fileInfos.Length == 0)
                 throw new ArgumentException("Game files info is null or empty", nameof(gameFileInfos));
@@ -599,7 +602,7 @@ namespace ProjectCeleste.GameFiles.GameScanner
             return new GameFilesInfo(new GameVersion(4, 0, 0, 6148), retVal);
         }
 
-        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false)
+        public static async Task<GameFilesInfo> GameFilesInfoFromCelesteManifest(bool isSteam = false, bool isPreview = false)
         {
             //Load default manifest
             var gameFilesInfo = await GameFilesInfoFromGameManifest(isSteam: isSteam);
@@ -609,7 +612,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             using (var client = new WebClient())
             {
                 manifestJsonContents = await client.DownloadStringTaskAsync(
-                    "https://downloads.projectceleste.com/game_files/manifest_override.json");
+                    isPreview ? "https://downloads.projectceleste.com/game_files_preview/manifest_override.json"
+                    : "https://downloads.projectceleste.com/game_files/manifest_override.json");
             }
 
             var gameFilesInfoOverride = JsonConvert.DeserializeObject<GameFilesInfo>(manifestJsonContents);
@@ -622,7 +626,8 @@ namespace ProjectCeleste.GameFiles.GameScanner
             using (var client = new WebClient())
             {
                 manifestXLiveJsonContents = await client.DownloadStringTaskAsync(
-                    "https://downloads.projectceleste.com/game_files/xlive.json");
+                    isPreview ? "https://downloads.projectceleste.com/game_files_preview/xlive.json"
+                    : "https://downloads.projectceleste.com/game_files/xlive.json");
             }
 
             gameFilesInfo.GameFileInfo["xlive.dll"] =
